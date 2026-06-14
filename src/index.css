@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --canvas: 210 40% 98%;
+    --sidebar: 0 0% 100%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Brand blue */
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 214 95% 96%;
+    --accent-foreground: 221 83% 45%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.7rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    font-variation-settings: normal;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tabular numbers for measurements / counts */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Quiet, precise scrollbars that fit a lab instrument UI */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(214 20% 82%) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(214 20% 82%);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(214 18% 72%);
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Prevent accidental text selection while drag-selecting wells */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Media-bottle fill animation for the G-Code generation loader */
+@keyframes cs-fill {
+  0% {
+    height: 4%;
+  }
+  100% {
+    height: 82%;
+  }
+}
+@keyframes cs-bubble {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateY(-78px) scale(0.4);
+    opacity: 0;
+  }
+}
+@keyframes cs-slosh {
+  0%,
+  100% {
+    transform: rotate(-1.2deg);
+  }
+  50% {
+    transform: rotate(1.2deg);
+  }
+}
+@keyframes cs-pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes cs-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Plate Routine — keep three columns side by side when the available width
+   allows it (measured by container query, so it respects the resizable nav),
+   otherwise stack and scroll vertically. */
+.pr-container {
+  container-type: inline-size;
+  height: 100%;
+  min-width: 0;
+}
+.pr-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  height: 100%;
+  overflow-y: auto;
+}
+.pr-col-controls {
+  flex-shrink: 0;
+}
+.pr-col-center,
+.pr-col-workflow {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.pr-col-center {
+  min-height: 440px;
+}
+.pr-col-workflow {
+  min-height: 480px;
+}
+
+@container (min-width: 1060px) {
+  .pr-grid {
+    flex-direction: row;
+    overflow: hidden;
+  }
+  .pr-col-controls {
+    width: 18rem;
+    height: 100%;
+  }
+  .pr-col-center {
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+  .pr-col-workflow {
+    width: 380px;
+    min-height: 0;
+    height: 100%;
+  }
+}
