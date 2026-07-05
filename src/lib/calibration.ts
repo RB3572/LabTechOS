@@ -1,13 +1,7 @@
 import type { DeckConfig, Plate } from '@/types'
 import { PLATE_MODELS, RESERVOIR, type PlateModelDef } from '@/lib/deck'
 
-export type CalKey =
-  | 'well-tl'
-  | 'well-tr'
-  | 'well-bl'
-  | 'well-br'
-  | 'fresh'
-  | 'waste'
+export type CalKey = 'well-tl' | 'well-br' | 'fresh' | 'waste'
 
 export interface Vec3 {
   x: number
@@ -31,23 +25,7 @@ export const CAL_STEPS: CalStep[] = [
     short: 'TL',
     group: 'plate',
     instruction:
-      'Jog the nozzle to the centre of the TOP-LEFT well, then lower it until it sits just above the well bottom.',
-  },
-  {
-    key: 'well-tr',
-    label: 'Top-Right Well',
-    short: 'TR',
-    group: 'plate',
-    instruction:
-      'Jog to the centre of the TOP-RIGHT well and lower to just above the well bottom.',
-  },
-  {
-    key: 'well-bl',
-    label: 'Bottom-Left Well',
-    short: 'BL',
-    group: 'plate',
-    instruction:
-      'Jog to the centre of the BOTTOM-LEFT well and lower to just above the well bottom.',
+      'Jog the nozzle to the CENTRE of the TOP-LEFT well, then lower it until it sits just above the well bottom. This diagonal pair fixes every well on the plate.',
   },
   {
     key: 'well-br',
@@ -55,7 +33,7 @@ export const CAL_STEPS: CalStep[] = [
     short: 'BR',
     group: 'plate',
     instruction:
-      'Jog to the centre of the BOTTOM-RIGHT well and lower to just above the well bottom.',
+      'Jog to the CENTRE of the opposite BOTTOM-RIGHT well and lower to just above the well bottom.',
   },
   {
     key: 'fresh',
@@ -106,8 +84,6 @@ export function calTargets(
   })
   return {
     'well-tl': corner(0, 0),
-    'well-tr': corner(wg.nX - 1, 0),
-    'well-bl': corner(0, wg.nY - 1),
     'well-br': corner(wg.nX - 1, wg.nY - 1),
     fresh: {
       x: deck.freshMedia.x + RESERVOIR.width / 2,
@@ -133,9 +109,11 @@ export interface CalibrationResult {
 }
 
 /**
- * Back-project captured nozzle positions into deck placement. The 4 corner
- * wells fix the plate origin (averaged) and the nozzle Z; the reservoir
- * captures (taken at the container centre) fix their footprints.
+ * Back-project captured nozzle positions into deck placement. Two diagonal
+ * corner wells (top-left + bottom-right) fix the plate origin (averaged from
+ * both) and the nozzle Z; every other well is then interpolated from the plate
+ * geometry. Reservoir captures (taken at the container centre) fix their
+ * footprints.
  */
 export function computeDeckFromCalibration(
   captured: Partial<Record<CalKey, Vec3>>,
@@ -144,16 +122,13 @@ export function computeDeckFromCalibration(
 ): CalibrationResult {
   const wg = wellGrid(plate, model)
   const out: CalibrationResult = {}
-  const { 'well-tl': tl, 'well-tr': tr, 'well-bl': bl, 'well-br': br } = captured
+  const { 'well-tl': tl, 'well-br': br } = captured
 
-  if (tl && tr && bl && br) {
-    const px =
-      (tl.x - wg.offX + (tr.x - (wg.offX + wg.gw)) + (bl.x - wg.offX) + (br.x - (wg.offX + wg.gw))) /
-      4
-    const py =
-      (tl.y - wg.offY + (tr.y - wg.offY) + (bl.y - (wg.offY + wg.gh)) + (br.y - (wg.offY + wg.gh))) /
-      4
-    const pz = (tl.z + tr.z + bl.z + br.z) / 4
+  if (tl && br) {
+    // tl sits at grid (0,0); br at the opposite corner (offset by gw, gh).
+    const px = (tl.x - wg.offX + (br.x - wg.offX - wg.gw)) / 2
+    const py = (tl.y - wg.offY + (br.y - wg.offY - wg.gh)) / 2
+    const pz = (tl.z + br.z) / 2
     out.plate = { x: r1(px), y: r1(py), z: r1(pz) }
     out.nozzleZ = r1(pz)
   }

@@ -95,7 +95,7 @@ export function PipetteCalibrationWorkspace() {
         <AxisLabels bed={bed} />
 
         <Suspense fallback={null}>
-          <PlateModel model={model} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
+          <PlateModel model={model} plate={plate} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
         </Suspense>
         <Reservoir x={deck.freshMedia.x} y={deck.freshMedia.y} hx={hx} hy={hy} height={deck.freshMedia.height} color="#ec4899" outOfBounds={!withinBed(freshF, bed)} nozzleRef={nozzleRef} />
         <Reservoir x={deck.waste.x} y={deck.waste.y} hx={hx} hy={hy} height={deck.waste.height} color="#475569" outOfBounds={!withinBed(wasteF, bed)} nozzleRef={nozzleRef} />

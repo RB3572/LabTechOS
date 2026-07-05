@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { useIsDesktop } from '@/lib/responsive'
 
 // Module-level cache so a panel keeps its width across remounts (page changes).
 const widthCache: Record<string, number> = {}
@@ -27,6 +28,7 @@ export function ResizablePanel({
   children: ReactNode
 }) {
   const [width, setWidth] = useState(() => widthCache[id] ?? initial)
+  const isDesktop = useIsDesktop()
 
   const startDrag = (e: React.PointerEvent) => {
     e.preventDefault()
@@ -49,6 +51,11 @@ export function ResizablePanel({
     document.body.style.userSelect = 'none'
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+  }
+
+  // Mobile: full-width, fills the remaining flex space (no fixed width, no handle).
+  if (!isDesktop) {
+    return <div className={cn('relative min-h-0 w-full flex-1', className)}>{children}</div>
   }
 
   return (

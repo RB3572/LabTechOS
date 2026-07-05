@@ -263,7 +263,7 @@ export function GCodePage() {
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <header className="flex items-center gap-4 border-b border-border px-5 py-3">
+      <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
         <div className="flex items-center gap-2.5">
           <FlaskConical className="size-5 text-primary" />
           <div>
@@ -294,13 +294,13 @@ export function GCodePage() {
       </header>
 
       {/* Viewer + explanation */}
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="h-[45vh] w-full shrink-0 md:h-auto md:min-w-0 md:flex-1">
           <CodeViewer lines={gcode.lines} selected={selected} onSelect={setSelected} />
         </div>
 
         <ResizablePanel id="gcode-panel" side="left" initial={360} min={300} max={560}>
-        <aside className="flex h-full w-full flex-col overflow-y-auto scrollbar-thin border-l border-border bg-white p-5">
+        <aside className="flex h-full w-full flex-col overflow-y-auto scrollbar-thin border-t border-border bg-white p-5 md:border-l md:border-t-0">
           {explanation ? (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

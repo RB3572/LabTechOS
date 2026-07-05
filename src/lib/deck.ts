@@ -26,7 +26,8 @@ export function snapValue(v: number): number {
 // ---------------------------------------------------------------------------
 
 export interface PlateModelDef {
-  url: string
+  /** STL model to load. When omitted, the plate is generated procedurally. */
+  url?: string
   /** Footprint width (X) and depth (Y) and overall height (Z), millimetres. */
   width: number
   depth: number
@@ -36,6 +37,19 @@ export interface PlateModelDef {
 }
 
 export const PLATE_MODELS: Record<PlateType, PlateModelDef> = {
+  '6-well': {
+    // Generated procedurally (no STL). Standard SBS footprint.
+    width: 127.76,
+    depth: 85.48,
+    height: 19.8,
+    rotateX: 0,
+  },
+  '12-well': {
+    width: 127.76,
+    depth: 85.48,
+    height: 19.6,
+    rotateX: 0,
+  },
   '24-well': {
     url: '/models/plate-24well.stl',
     width: 127.89,

@@ -16,6 +16,34 @@ function makeColLabels(cols: number): string[] {
 }
 
 export const PLATES: Record<PlateType, Plate> = {
+  '6-well': {
+    type: '6-well',
+    name: '6 Well Plate',
+    vendor: 'Corning · Flat Bottom',
+    rows: 2,
+    cols: 3,
+    rowLabels: ROW_LETTERS.slice(0, 2),
+    colLabels: makeColLabels(3),
+    wellCount: 6,
+    wellDiameter: 34.8,
+    pitch: 39.12,
+    height: 19.8,
+    workingVolume: 3000,
+  },
+  '12-well': {
+    type: '12-well',
+    name: '12 Well Plate',
+    vendor: 'Corning · Flat Bottom',
+    rows: 3,
+    cols: 4,
+    rowLabels: ROW_LETTERS.slice(0, 3),
+    colLabels: makeColLabels(4),
+    wellCount: 12,
+    wellDiameter: 22.1,
+    pitch: 26.0,
+    height: 19.6,
+    workingVolume: 2200,
+  },
   '24-well': {
     type: '24-well',
     name: '24 Well Plate',
@@ -47,6 +75,8 @@ export const PLATES: Record<PlateType, Plate> = {
 }
 
 export const PLATE_OPTIONS: { value: PlateType; label: string }[] = [
+  { value: '6-well', label: '6 Well Plate' },
+  { value: '12-well', label: '12 Well Plate' },
   { value: '24-well', label: '24 Well Plate' },
   { value: '96-well', label: '96 Well Plate' },
 ]

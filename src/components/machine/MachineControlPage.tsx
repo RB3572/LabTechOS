@@ -9,6 +9,7 @@ import {
   CornerDownLeft,
   Home,
   Send,
+  Syringe,
   Terminal,
   Usb,
 } from 'lucide-react'
@@ -20,6 +21,8 @@ import { cn } from '@/lib/utils'
 
 const FEED = 1500
 const STEP_SIZES = [0.1, 1, 10]
+const SYRINGE_STEPS = [0.5, 1, 5]
+const SYRINGE_FEED = 200
 
 interface LogEntry {
   dir: 'tx' | 'rx' | 'sys'
@@ -89,6 +92,8 @@ export function MachineControlPage() {
   const jogToolhead = useStore((s) => s.jogToolhead)
   const setJogStep = useStore((s) => s.setJogStep)
 
+  const [syringeStep, setSyringeStep] = useState(1)
+  const [syringePos, setSyringePos] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
   const [command, setCommand] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -159,11 +164,24 @@ export function MachineControlPage() {
     setCalHomed(true)
   }
 
+  // Advance (+) pushes the plunger / dispenses; retract (−) draws liquid up.
+  const moveSyringe = (delta: number) => {
+    setSyringePos((p) => Math.round((p + delta) * 100) / 100)
+    if (cal.connected) {
+      ;['M83', `G1 E${delta} F${SYRINGE_FEED}`].forEach((l) => {
+        void serial.send(l)
+        append('tx', l)
+      })
+    } else {
+      append('sys', `Syringe ${delta > 0 ? 'advance' : 'retract'} ${Math.abs(delta)} mm (offline — not sent)`)
+    }
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col md:flex-row">
       {/* Controls */}
       <ResizablePanel id="machine-panel" side="right" initial={380} min={320} max={520}>
-        <aside className="flex h-full w-full flex-col overflow-y-auto scrollbar-thin border-r border-border bg-white">
+        <aside className="flex h-full w-full flex-col overflow-y-auto scrollbar-thin border-b border-border bg-white md:border-b-0 md:border-r">
         {/* Connection */}
         <section className="border-b border-border p-5">
           <div className="flex items-center justify-between">
@@ -280,11 +298,53 @@ export function MachineControlPage() {
             </p>
           )}
         </section>
+
+        {/* Syringe (extruder) */}
+        <section className="border-b border-border p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Syringe className="size-[18px] text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Syringe</h3>
+            <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
+              E {syringePos.toFixed(2)} mm
+            </span>
+          </div>
+
+          <div className="mb-3 flex gap-1.5">
+            {SYRINGE_STEPS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setSyringeStep(s)}
+                className={cn(
+                  'flex-1 rounded-md border py-1.5 text-xs font-semibold transition-colors',
+                  syringeStep === s
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {s} mm
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(-syringeStep)}>
+              <ChevronsUp className="size-4" />
+              Retract
+            </Button>
+            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(syringeStep)}>
+              <ChevronsDown className="size-4" />
+              Advance
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            Advance pushes the plunger (dispense); retract draws liquid up (aspirate).
+          </p>
+        </section>
         </aside>
       </ResizablePanel>
 
       {/* Console + commands */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Common commands */}
         <div className="border-b border-border p-5">
           <h3 className="mb-3 text-sm font-semibold text-foreground">Quick Commands</h3>

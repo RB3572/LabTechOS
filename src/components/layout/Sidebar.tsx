@@ -3,12 +3,23 @@ import { useStore } from '@/store/useStore'
 import { NAV_FOOTER, NAV_PRIMARY, type NavItemDef } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 
-function NavButton({ item, active }: { item: NavItemDef; active: boolean }) {
+function NavButton({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavItemDef
+  active: boolean
+  onNavigate?: () => void
+}) {
   const setPage = useStore((s) => s.setPage)
   const Icon = item.icon
   return (
     <button
-      onClick={() => setPage(item.key)}
+      onClick={() => {
+        setPage(item.key)
+        onNavigate?.()
+      }}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -30,7 +41,7 @@ function NavButton({ item, active }: { item: NavItemDef; active: boolean }) {
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const page = useStore((s) => s.page)
 
   return (
@@ -49,16 +60,16 @@ export function Sidebar() {
       </div>
 
       {/* Primary navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto scrollbar-thin px-3 py-2">
         {NAV_PRIMARY.map((item) => (
-          <NavButton key={item.key} item={item} active={item.key === page} />
+          <NavButton key={item.key} item={item} active={item.key === page} onNavigate={onNavigate} />
         ))}
       </nav>
 
       {/* Footer navigation */}
       <div className="space-y-1 border-t border-border px-3 py-3">
         {NAV_FOOTER.map((item) => (
-          <NavButton key={item.key} item={item} active={item.key === page} />
+          <NavButton key={item.key} item={item} active={item.key === page} onNavigate={onNavigate} />
         ))}
       </div>
     </aside>

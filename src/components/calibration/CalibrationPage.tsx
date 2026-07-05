@@ -131,9 +131,9 @@ export function CalibrationPage() {
   const fmt = (v: Vec3) => `X${v.x} Y${v.y} Z${v.z}`
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col md:flex-row">
       {/* 3D workspace */}
-      <div className="relative min-w-0 flex-1 overflow-hidden bg-gradient-to-b from-white to-slate-50">
+      <div className="relative h-[46vh] w-full shrink-0 overflow-hidden bg-gradient-to-b from-white to-slate-50 md:h-full md:w-auto md:min-w-0 md:flex-1 md:shrink">
         <DotGrid className="pointer-events-none absolute inset-0 z-0 h-full w-full" />
         <div className="absolute inset-0 z-10">
           <CalibrationWorkspace />

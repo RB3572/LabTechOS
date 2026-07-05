@@ -14,7 +14,7 @@ import {
 } from '@react-three/drei'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import * as THREE from 'three'
-import type { BedSize, DeckObjectKey } from '@/types'
+import type { BedSize, DeckObjectKey, Plate } from '@/types'
 import { useStore } from '@/store/useStore'
 import { cn } from '@/lib/utils'
 import { PLATES } from '@/lib/plate'
@@ -189,18 +189,9 @@ export function AxisLabels({ bed }: { bed: BedSize }) {
 // Culture plate (STL)
 // ---------------------------------------------------------------------------
 
-export function PlateModel({
-  model,
-  x,
-  y,
-  z,
-  hx,
-  hy,
-  outOfBounds,
-  onPointerDown,
-  onHover,
-}: {
+interface PlateModelProps {
   model: PlateModelDef
+  plate: Plate
   x: number
   y: number
   z: number
@@ -209,8 +200,15 @@ export function PlateModel({
   outOfBounds: boolean
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void
   onHover?: (over: boolean) => void
-}) {
-  const geom = useLoader(STLLoader, model.url)
+}
+
+/** Culture plate — a loaded STL when available, otherwise a generated mesh. */
+export function PlateModel(props: PlateModelProps) {
+  return props.model.url ? <StlPlate {...props} /> : <GeneratedPlate {...props} />
+}
+
+function StlPlate({ model, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
+  const geom = useLoader(STLLoader, model.url!)
   const prepared = useMemo(() => {
     const g = geom.clone()
     if (model.rotateX) g.rotateX(model.rotateX)
@@ -244,6 +242,61 @@ export function PlateModel({
         clearcoatRoughness={0.14}
       />
     </mesh>
+  )
+}
+
+// A dimensionally-accurate plate built from geometry (used for plates without an
+// STL). Body = rounded box; wells = recessed circular openings in a landscape
+// grid matching the app's coordinate system.
+function GeneratedPlate({ model, plate, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
+  const { width, depth, height } = model
+  const nX = Math.max(plate.rows, plate.cols)
+  const nY = Math.min(plate.rows, plate.cols)
+  const pitch = plate.pitch
+  const wellR = plate.wellDiameter / 2
+  const offX = (width - (nX - 1) * pitch) / 2
+  const offY = (depth - (nY - 1) * pitch) / 2
+
+  const wells = useMemo(() => {
+    const out: [number, number][] = []
+    for (let cy = 0; cy < nY; cy++)
+      for (let cx = 0; cx < nX; cx++) out.push([offX + cx * pitch, offY + cy * pitch])
+    return out
+  }, [nX, nY, pitch, offX, offY])
+
+  const bodyColor = outOfBounds ? '#fca5a5' : '#dbe7f7'
+  const wellColor = outOfBounds ? '#ef9a9a' : '#aec4e2'
+  const rimColor = outOfBounds ? '#e57373' : '#8ea8cd'
+
+  return (
+    <group
+      position={[x - hx, z, y - hy]}
+      onPointerDown={onPointerDown}
+      onPointerOver={() => {
+        if (onPointerDown) document.body.style.cursor = 'grab'
+        onHover?.(true)
+      }}
+      onPointerOut={() => {
+        if (onPointerDown) document.body.style.cursor = 'auto'
+        onHover?.(false)
+      }}
+    >
+      <RoundedBox args={[width, height, depth]} radius={2.5} smoothness={4} position={[width / 2, height / 2, depth / 2]} castShadow>
+        <meshPhysicalMaterial color={bodyColor} roughness={0.22} metalness={0} clearcoat={0.85} clearcoatRoughness={0.14} />
+      </RoundedBox>
+      {wells.map(([wx, wy], i) => (
+        <group key={i} position={[wx, height + 0.06, wy]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh>
+            <circleGeometry args={[wellR, 40]} />
+            <meshStandardMaterial color={wellColor} roughness={0.4} metalness={0} />
+          </mesh>
+          <mesh position={[0, 0, 0.03]}>
+            <ringGeometry args={[wellR * 0.88, wellR, 40]} />
+            <meshStandardMaterial color={rimColor} roughness={0.35} metalness={0} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   )
 }
 
@@ -832,6 +885,7 @@ export function PrinterWorkspace({
         <Suspense fallback={null}>
           <PlateModel
             model={model}
+            plate={plate}
             x={deck.plate.x}
             y={deck.plate.y}
             z={deck.plate.z}

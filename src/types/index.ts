@@ -16,7 +16,7 @@ export type Page =
   | 'logs'
 
 /** Supported labware. Geometry for each lives in `lib/plate.ts`. */
-export type PlateType = '24-well' | '96-well'
+export type PlateType = '6-well' | '12-well' | '24-well' | '96-well'
 
 /**
  * A single addressable well on a plate.
