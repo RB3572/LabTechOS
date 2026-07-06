@@ -5,7 +5,8 @@ import type { BedSize, DeckConfig, ObjectStatus, Plate, PlateType } from '@/type
 // ---------------------------------------------------------------------------
 
 /** Default printable build volume of the CS-4000 deck (user-configurable). */
-export const BED: BedSize = { x: 256, y: 256, z: 220 }
+// Default build volume — Creality Ender 3 SE (220 × 220 × 250 mm).
+export const BED: BedSize = { x: 220, y: 220, z: 250 }
 
 /** Media / waste reservoirs are modelled as a rounded rectangular prism. */
 export const RESERVOIR = { width: 30, depth: 20, height: 34, radius: 4 }
@@ -38,17 +39,18 @@ export interface PlateModelDef {
 
 export const PLATE_MODELS: Record<PlateType, PlateModelDef> = {
   '6-well': {
-    // Generated procedurally (no STL). Standard SBS footprint.
-    width: 127.76,
-    depth: 85.48,
-    height: 19.8,
-    rotateX: 0,
+    url: '/models/6_well_plate.stl',
+    width: 127.63,
+    depth: 85.5,
+    height: 20.0,
+    rotateX: -Math.PI / 2,
   },
   '12-well': {
-    width: 127.76,
-    depth: 85.48,
-    height: 19.6,
-    rotateX: 0,
+    url: '/models/12_well_plate.stl',
+    width: 127.6,
+    depth: 85.3,
+    height: 20.0,
+    rotateX: -Math.PI / 2,
   },
   '24-well': {
     url: '/models/plate-24well.stl',

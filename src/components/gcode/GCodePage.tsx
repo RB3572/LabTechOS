@@ -154,7 +154,7 @@ function GateRow({
 export function GCodePage() {
   const deck = useStore((s) => s.deck)
   const plateType = useStore((s) => s.plateType)
-  const workflows = useStore((s) => s.workflows)
+  const routine = useStore((s) => s.routine)
   const bed = useStore((s) => s.bed)
   const captured = useStore((s) => s.calibration.captured)
   const pipetteMmPerUl = useStore((s) => s.pipette.mmPerUl)
@@ -179,7 +179,7 @@ export function GCodePage() {
     setSelected(null)
     setGenerating(true)
     const nozzleZ = computeDeckFromCalibration(captured, plate).nozzleZ
-    const program = generateGcode({ deck, plate, workflows, nozzleZ, ulToE: pipetteMmPerUl ?? 1 })
+    const program = generateGcode({ deck, plate, routine, nozzleZ, ulToE: pipetteMmPerUl ?? 1 })
     timer.current = window.setTimeout(() => {
       setGcode(program)
       setGenerating(false)

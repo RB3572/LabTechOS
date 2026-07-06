@@ -1,8 +1,9 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
-import { ChevronDown, GripVertical, Trash2 } from 'lucide-react'
+import { ChevronDown, GripVertical, MapPin, Trash2 } from 'lucide-react'
 import type { WorkflowStep } from '@/types'
-import { BLOCK_DEFINITIONS, WAIT_UNITS } from '@/lib/workflow'
+import { BLOCK_DEFINITIONS, WAIT_UNITS, stepNeedsWell } from '@/lib/workflow'
+import { PLATES, generateWells } from '@/lib/plate'
 import { useStore } from '@/store/useStore'
 import { cn } from '@/lib/utils'
 import {
@@ -76,11 +77,70 @@ function UnitSelect({
   )
 }
 
+/** Target-well picker for aspirate / dispense / mix blocks. */
+function WellSelect({ step }: { step: WorkflowStep }) {
+  const updateStepParams = useStore((s) => s.updateStepParams)
+  const selectStep = useStore((s) => s.selectStep)
+  const plateType = useStore((s) => s.plateType)
+  const selectedStepId = useStore((s) => s.selectedStepId)
+  const wellIds = useMemo(
+    () => generateWells(PLATES[plateType]).map((w) => w.id),
+    [plateType],
+  )
+  const current = String(step.params.well ?? '')
+  const active = selectedStepId === step.id
+  const needsWell = stepNeedsWell(step)
+
+  return (
+    <label className="inline-flex items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">Well</span>
+      <span className="inline-flex items-center gap-1">
+        <MapPin
+          className={cn(
+            'size-3.5',
+            needsWell ? 'text-amber-500' : active ? 'text-primary' : 'text-muted-foreground/60',
+          )}
+        />
+        <select
+          value={current}
+          onChange={(e) => updateStepParams(step.id, { well: e.target.value })}
+          onFocus={() => selectStep(step.id)}
+          className={cn(
+            'h-7 rounded-md border bg-white px-2 text-sm font-medium text-foreground shadow-sm focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            needsWell ? 'border-amber-300 text-amber-700' : 'border-input',
+          )}
+        >
+          <option value="">— pick —</option>
+          {wellIds.map((id) => (
+            <option key={id} value={id}>
+              {id}
+            </option>
+          ))}
+        </select>
+      </span>
+    </label>
+  )
+}
+
 function ParamsEditor({ step }: { step: WorkflowStep }) {
   const updateStepParams = useStore((s) => s.updateStepParams)
   switch (step.type) {
-    case 'remove-media':
-    case 'add-media':
+    case 'aspirate':
+    case 'dispense':
+      return (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <WellSelect step={step} />
+          <NumberField
+            label="Volume"
+            suffix="µL"
+            step={10}
+            value={Number(step.params.volume)}
+            onChange={(v) => updateStepParams(step.id, { volume: v })}
+          />
+        </div>
+      )
+    case 'get-media':
+    case 'to-waste':
       return (
         <NumberField
           label="Volume"
@@ -89,6 +149,26 @@ function ParamsEditor({ step }: { step: WorkflowStep }) {
           value={Number(step.params.volume)}
           onChange={(v) => updateStepParams(step.id, { volume: v })}
         />
+      )
+    case 'mix':
+      return (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <WellSelect step={step} />
+          <NumberField
+            label="Volume"
+            suffix="µL"
+            step={10}
+            value={Number(step.params.volume)}
+            onChange={(v) => updateStepParams(step.id, { volume: v })}
+          />
+          <NumberField
+            label="Cycles"
+            suffix="×"
+            min={1}
+            value={Number(step.params.cycles)}
+            onChange={(v) => updateStepParams(step.id, { cycles: v })}
+          />
+        </div>
       )
     case 'wait':
       return (
@@ -225,11 +305,14 @@ export function WorkflowBlock({
   const removeStep = useStore((s) => s.removeStep)
   const moveStep = useStore((s) => s.moveStep)
   const insertStep = useStore((s) => s.insertStep)
+  const selectStep = useStore((s) => s.selectStep)
+  const selectedStepId = useStore((s) => s.selectedStepId)
 
   const def = BLOCK_DEFINITIONS[step.type]
   const Icon = BLOCK_ICONS[step.type]
   const accent = ACCENTS[def.accent]
   const isLoop = step.type === 'loop'
+  const isSelected = selectedStepId === step.id
 
   const blockRef = useRef<HTMLDivElement | null>(null)
   const [edge, setEdge] = useState<'top' | 'bottom' | null>(null)
@@ -291,8 +374,11 @@ export function WorkflowBlock({
   return (
     <div
       ref={setBlockNode}
+      onClick={() => def.targetsWell && selectStep(step.id)}
       className={cn(
-        'group/block relative flex overflow-hidden rounded-lg border border-border bg-white shadow-sm transition-shadow',
+        'group/block relative flex overflow-hidden rounded-lg border bg-white shadow-sm transition-shadow',
+        def.targetsWell && 'cursor-pointer',
+        isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border',
         isDragging && 'opacity-40',
       )}
     >

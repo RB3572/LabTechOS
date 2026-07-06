@@ -105,6 +105,15 @@ const TABS: { key: DeckTab; label: string; icon: LucideIcon }[] = [
   { key: 'printer', label: 'Printer', icon: Box },
 ]
 
+// Common FDM printer build volumes (mm). The Ender 3 SE is the default.
+const PRINTER_PRESETS: { label: string; x: number; y: number; z: number }[] = [
+  { label: 'Ender 3 SE', x: 220, y: 220, z: 250 },
+  { label: 'Ender 3 / V2', x: 220, y: 220, z: 250 },
+  { label: 'Ender 5', x: 220, y: 220, z: 300 },
+  { label: 'CR-10', x: 300, y: 300, z: 400 },
+  { label: 'Prusa i3 MK3S', x: 250, y: 210, z: 210 },
+]
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
@@ -124,6 +133,7 @@ export function DeckPanel() {
 
   const validation = validateDeck(deck, plate, plateConfigured, bed)
   const errors = validation.issues.filter((i) => i.level === 'error')
+  const presetMatch = PRINTER_PRESETS.find((p) => p.x === bed.x && p.y === bed.y && p.z === bed.z)
   const [feedback, setFeedback] = useState<string | null>(null)
 
   const set =
@@ -215,15 +225,37 @@ export function DeckPanel() {
 
         {tab === 'printer' && (
           <section>
-            <SectionHeader icon={Box} title="Build Volume" slot="CS-4000" />
-            <div className="grid grid-cols-2 gap-3">
+            <SectionHeader icon={Box} title="Build Volume" slot="Printer" />
+
+            <label className="block">
+              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Printer preset
+              </span>
+              <select
+                value={presetMatch?.label ?? 'custom'}
+                onChange={(e) => {
+                  const p = PRINTER_PRESETS.find((pr) => pr.label === e.target.value)
+                  if (p) setBed({ x: p.x, y: p.y, z: p.z })
+                }}
+                className="mt-1 h-9 w-full rounded-md border border-input bg-white px-2.5 text-sm font-medium text-foreground shadow-sm focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {PRINTER_PRESETS.map((p) => (
+                  <option key={p.label} value={p.label}>
+                    {p.label} · {p.x} × {p.y} × {p.z} mm
+                  </option>
+                ))}
+                {!presetMatch && <option value="custom">Custom · {bed.x} × {bed.y} × {bed.z} mm</option>}
+              </select>
+            </label>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <CoordField label="Length (X)" suffix="mm" value={bed.x} onChange={(v) => setBed({ x: v })} />
               <CoordField label="Width (Y)" suffix="mm" value={bed.y} onChange={(v) => setBed({ y: v })} />
               <CoordField label="Height (Z)" suffix="mm" value={bed.z} onChange={(v) => setBed({ z: v })} />
             </div>
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              Sets the printable area. All deck objects must fit within these
-              bounds or they'll be flagged out of bounds.
+              Pick a preset or set the printable area manually. All deck objects
+              must fit within these bounds or they'll be flagged out of bounds.
             </p>
           </section>
         )}

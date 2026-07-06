@@ -8,7 +8,6 @@
 
 import type { DeckConfig, Plate, WorkflowStep } from '@/types'
 import { PLATE_MODELS, RESERVOIR, type PlateModelDef } from '@/lib/deck'
-import { compareWellIds } from '@/lib/plate'
 
 export interface Pt {
   x: number
@@ -99,7 +98,7 @@ export function wellPositions(
 export interface GenOptions {
   deck: DeckConfig
   plate: Plate
-  workflows: Record<string, WorkflowStep[]>
+  routine: WorkflowStep[]
   model?: PlateModelDef
   /** Calibrated nozzle Z (just above the well bottom); defaults to plate Z + 1. */
   nozzleZ?: number
@@ -119,10 +118,9 @@ export function segDurationMs(seg: PathSeg): number {
 
 export function generateGcode(opts: GenOptions): GcodeProgram {
   const model = opts.model ?? PLATE_MODELS[opts.plate.type]
-  const { deck, plate, workflows } = opts
+  const { deck, plate, routine } = opts
   const ulToE = opts.ulToE && opts.ulToE > 0 ? opts.ulToE : 1
   const positions = wellPositions(deck, plate, model)
-  const allWells = Object.keys(positions).sort(compareWellIds)
 
   const travelZ = f1(
     Math.max(deck.plate.z + plate.height, deck.freshMedia.height, deck.waste.height) + 10,
@@ -201,29 +199,23 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
 
   // --- protocol primitives -------------------------------------------------
 
-  const removeMedia = (wellId: string, vol: number) => {
+  // Aspirate from a single well (draw liquid up out of it).
+  const aspirateWell = (wellId: string, vol: number) => {
     const p = positions[wellId]
     if (!p) return
-    comment(`Remove ${vol} uL from ${wellId}`)
+    comment(`Aspirate ${vol} uL from ${wellId}`)
     move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
     move({ z: nozzleZ }, Z_FEED, 'down')
     extrude(vol, 'aspirate')
     move({ z: travelZ }, Z_FEED, 'up')
-    move({ x: waste.x, y: waste.y }, TRAVEL_FEED, 'travel', 'G0')
-    move({ z: reservoirZ }, Z_FEED, 'down')
-    extrude(vol, 'dispense')
-    move({ z: travelZ }, Z_FEED, 'up')
     operations++
   }
 
-  const addMedia = (wellId: string, vol: number) => {
+  // Dispense into a single well.
+  const dispenseWell = (wellId: string, vol: number) => {
     const p = positions[wellId]
     if (!p) return
-    comment(`Add ${vol} uL to ${wellId}`)
-    move({ x: fresh.x, y: fresh.y }, TRAVEL_FEED, 'travel', 'G0')
-    move({ z: reservoirZ }, Z_FEED, 'down')
-    extrude(vol, 'aspirate')
-    move({ z: travelZ }, Z_FEED, 'up')
+    comment(`Dispense ${vol} uL to ${wellId}`)
     move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
     move({ z: dispenseZ }, Z_FEED, 'down')
     extrude(vol, 'dispense')
@@ -231,27 +223,78 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
     operations++
   }
 
-  const executeSteps = (steps: WorkflowStep[], wells: string[]) => {
+  // Draw fresh media from its reservoir.
+  const getMedia = (vol: number) => {
+    comment(`Get ${vol} uL fresh media`)
+    move({ x: fresh.x, y: fresh.y }, TRAVEL_FEED, 'travel', 'G0')
+    move({ z: reservoirZ }, Z_FEED, 'down')
+    extrude(vol, 'aspirate')
+    move({ z: travelZ }, Z_FEED, 'up')
+    operations++
+  }
+
+  // Expel liquid into the waste hub.
+  const toWaste = (vol: number) => {
+    comment(`Deposit ${vol} uL to waste`)
+    move({ x: waste.x, y: waste.y }, TRAVEL_FEED, 'travel', 'G0')
+    move({ z: reservoirZ }, Z_FEED, 'down')
+    extrude(vol, 'dispense')
+    move({ z: travelZ }, Z_FEED, 'up')
+    operations++
+  }
+
+  // Mix a well in place: repeated aspirate/dispense cycles at the well bottom.
+  const mixWell = (wellId: string, vol: number, cycles: number) => {
+    const p = positions[wellId]
+    if (!p || cycles <= 0) return
+    comment(`Mix ${wellId} — ${cycles} cycle${cycles === 1 ? '' : 's'} of ${vol} uL`)
+    move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
+    move({ z: nozzleZ }, Z_FEED, 'down')
+    for (let i = 0; i < cycles; i++) {
+      extrude(vol, 'aspirate')
+      extrude(vol, 'dispense')
+    }
+    move({ z: travelZ }, Z_FEED, 'up')
+    operations++
+  }
+
+  const executeSteps = (steps: WorkflowStep[]) => {
     for (const step of steps) {
-      if (step.type === 'loop') {
-        const reps = Number(step.params.repetitions) || 0
-        for (let i = 0; i < reps; i++) {
-          comment(`Loop iteration ${i + 1} of ${reps}`)
-          executeSteps(step.children ?? [], wells)
+      const vol = Number(step.params.volume) || 0
+      const well = String(step.params.well ?? '')
+      switch (step.type) {
+        case 'loop': {
+          const reps = Number(step.params.repetitions) || 0
+          for (let i = 0; i < reps; i++) {
+            comment(`Loop iteration ${i + 1} of ${reps}`)
+            executeSteps(step.children ?? [])
+          }
+          break
         }
-      } else if (step.type === 'remove-media') {
-        const vol = Number(step.params.volume) || 0
-        for (const w of wells) removeMedia(w, vol)
-      } else if (step.type === 'add-media') {
-        const vol = Number(step.params.volume) || 0
-        for (const w of wells) addMedia(w, vol)
-      } else if (step.type === 'wait') {
-        const dur = Number(step.params.duration) || 0
-        const unit = String(step.params.unit)
-        const seconds = unit === 'hours' ? dur * 3600 : unit === 'minutes' ? dur * 60 : dur
-        comment(`Wait ${dur} ${unit}`)
-        dwell(seconds)
-        operations++
+        case 'aspirate':
+          if (well) aspirateWell(well, vol)
+          break
+        case 'dispense':
+          if (well) dispenseWell(well, vol)
+          break
+        case 'get-media':
+          getMedia(vol)
+          break
+        case 'to-waste':
+          toWaste(vol)
+          break
+        case 'mix':
+          if (well) mixWell(well, vol, Number(step.params.cycles) || 0)
+          break
+        case 'wait': {
+          const dur = Number(step.params.duration) || 0
+          const unit = String(step.params.unit)
+          const seconds = unit === 'hours' ? dur * 3600 : unit === 'minutes' ? dur * 60 : dur
+          comment(`Wait ${dur} ${unit}`)
+          dwell(seconds)
+          operations++
+          break
+        }
       }
     }
   }
@@ -278,17 +321,19 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
 
   // --- body ----------------------------------------------------------------
 
-  let wellSetCount = 0
-  for (const key of Object.keys(workflows)) {
-    const steps = workflows[key]
-    if (!steps || steps.length === 0) continue
-    const wells = key === '' ? allWells : key.split(',').filter((w) => positions[w])
-    if (wells.length === 0) continue
-    wellSetCount++
-    comment(`— Routine on ${wells.length} well${wells.length === 1 ? '' : 's'}: ${wells.join(', ')}`)
-    executeSteps(steps, wells)
-    blank()
+  const usedWells = new Set<string>()
+  const collectWells = (steps: WorkflowStep[]) => {
+    for (const s of steps) {
+      const w = s.params.well
+      if (typeof w === 'string' && w && positions[w]) usedWells.add(w)
+      if (s.children) collectWells(s.children)
+    }
   }
+  collectWells(routine)
+
+  comment(`— Routine: ${routine.length} top-level step${routine.length === 1 ? '' : 's'}`)
+  executeSteps(routine)
+  blank()
 
   // --- postamble -----------------------------------------------------------
 
@@ -307,7 +352,7 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
     text: lines.join('\n'),
     path,
     meta: {
-      wells: wellSetCount,
+      wells: usedWells.size,
       operations,
       durationMs,
       lineCount: lines.length,

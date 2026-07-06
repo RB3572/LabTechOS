@@ -5,11 +5,13 @@ import { cn } from '@/lib/utils'
 
 interface PlateVisualizationProps {
   plate: Plate
-  selected: Set<string>
-  onWellMouseDown: (well: Well, e: React.MouseEvent) => void
-  onWellMouseEnter: (well: Well, e: React.MouseEvent) => void
-  onRowLabel: (rowIndex: number, e: React.MouseEvent) => void
-  onColLabel: (colIndex: number, e: React.MouseEvent) => void
+  /** Wells referenced anywhere in the routine. */
+  used: Set<string>
+  /** The well targeted by the currently-selected block (highlighted strongly). */
+  activeWell?: string
+  /** Whether clicking a well will assign it (a well-targeting block is selected). */
+  assignable: boolean
+  onWellClick: (well: Well) => void
 }
 
 /** Rounded rectangle with a chamfered top-left (A1) corner — the classic SBS look. */
@@ -36,11 +38,10 @@ function platePath(
 
 export function PlateVisualization({
   plate,
-  selected,
-  onWellMouseDown,
-  onWellMouseEnter,
-  onRowLabel,
-  onColLabel,
+  used,
+  activeWell,
+  assignable,
+  onWellClick,
 }: PlateVisualizationProps) {
   const geo = useMemo(() => getPlateGeometry(plate), [plate])
   const wells = useMemo(() => generateWells(plate), [plate])
@@ -114,30 +115,17 @@ export function PlateVisualization({
       {plate.colLabels.map((label, c) => {
         const pos = geo.colLabelPos(c)
         return (
-          <g
+          <text
             key={`col-${label}`}
-            data-col-label={label}
-            className="group cursor-pointer"
-            onClick={(e) => onColLabel(c, e)}
+            x={pos.x}
+            y={pos.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={geo.labelFont}
+            className="fill-slate-400 font-semibold"
           >
-            <rect
-              x={pos.x - geo.pitch / 2}
-              y={0}
-              width={geo.pitch}
-              height={geo.gutter}
-              fill="transparent"
-            />
-            <text
-              x={pos.x}
-              y={pos.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={geo.labelFont}
-              className="fill-slate-400 font-semibold transition-colors group-hover:fill-blue-600"
-            >
-              {label}
-            </text>
-          </g>
+            {label}
+          </text>
         )
       })}
 
@@ -145,53 +133,46 @@ export function PlateVisualization({
       {plate.rowLabels.map((label, r) => {
         const pos = geo.rowLabelPos(r)
         return (
-          <g
+          <text
             key={`row-${label}`}
-            data-row-label={label}
-            className="group cursor-pointer"
-            onClick={(e) => onRowLabel(r, e)}
+            x={pos.x}
+            y={pos.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={geo.labelFont}
+            className="fill-slate-400 font-semibold"
           >
-            <rect
-              x={0}
-              y={pos.y - geo.pitch / 2}
-              width={geo.gutter}
-              height={geo.pitch}
-              fill="transparent"
-            />
-            <text
-              x={pos.x}
-              y={pos.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={geo.labelFont}
-              className="fill-slate-400 font-semibold transition-colors group-hover:fill-blue-600"
-            >
-              {label}
-            </text>
-          </g>
+            {label}
+          </text>
         )
       })}
 
       {/* Wells */}
       {wells.map((well) => {
         const { cx, cy } = geo.center(well.row, well.col)
-        const isSelected = selected.has(well.id)
+        const isActive = activeWell === well.id
+        const isUsed = used.has(well.id)
         return (
           <g key={well.id}>
             <circle
               cx={cx}
               cy={cy}
               r={geo.radius}
-              strokeWidth={strokeW}
+              strokeWidth={isActive ? strokeW * 2 : strokeW}
               data-well={well.id}
               aria-label={`Well ${well.id}`}
-              onMouseDown={(e) => onWellMouseDown(well, e)}
-              onMouseEnter={(e) => onWellMouseEnter(well, e)}
+              onClick={() => onWellClick(well)}
               className={cn(
-                'cursor-pointer transition-[fill,stroke] duration-100',
-                isSelected
+                'transition-[fill,stroke] duration-100',
+                assignable ? 'cursor-pointer' : 'cursor-default',
+                isActive
                   ? '[fill:url(#wellSelected)] stroke-blue-700'
-                  : '[fill:url(#wellEmpty)] stroke-slate-300 hover:[fill:url(#wellHover)] hover:stroke-blue-400',
+                  : isUsed
+                    ? '[fill:url(#wellHover)] stroke-blue-400'
+                    : cn(
+                        '[fill:url(#wellEmpty)] stroke-slate-300',
+                        assignable && 'hover:[fill:url(#wellHover)] hover:stroke-blue-400',
+                      ),
               )}
             />
             {geo.showWellIds && (
@@ -203,7 +184,7 @@ export function PlateVisualization({
                 fontSize={geo.wellLabelFont}
                 className={cn(
                   'pointer-events-none font-medium',
-                  isSelected ? 'fill-white' : 'fill-slate-400',
+                  isActive ? 'fill-white' : isUsed ? 'fill-blue-600' : 'fill-slate-400',
                 )}
               >
                 {well.id}

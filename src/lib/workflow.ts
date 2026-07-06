@@ -1,25 +1,59 @@
 import type { BlockDefinition, BlockType, WorkflowStep } from '@/types'
 
 // ---------------------------------------------------------------------------
-// Block library — static definitions for the four protocol primitives.
+// Block library — static definitions for the protocol primitives.
+//
+// Liquid-handling is expressed as discrete transfers: aspirate from a well,
+// dispense to a well, pull fresh media, push to waste, or mix a well in place.
+// Every aspirate/dispense/mix block targets exactly one well, so a routine can
+// pick up from one well and deposit into the next.
 // ---------------------------------------------------------------------------
 
 export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
-  'remove-media': {
-    type: 'remove-media',
-    label: 'Remove Media',
-    description: 'Aspirate spent media from each well.',
+  aspirate: {
+    type: 'aspirate',
+    label: 'Aspirate from Well',
+    description: 'Draw liquid out of one well.',
     accent: 'rose',
     container: false,
-    defaults: { volume: 200 },
+    targetsWell: true,
+    defaults: { well: '', volume: 200 },
   },
-  'add-media': {
-    type: 'add-media',
-    label: 'Add Fresh Media',
-    description: 'Dispense fresh media into each well.',
+  dispense: {
+    type: 'dispense',
+    label: 'Dispense to Well',
+    description: 'Deposit liquid into one well.',
     accent: 'emerald',
     container: false,
+    targetsWell: true,
+    defaults: { well: '', volume: 200 },
+  },
+  'get-media': {
+    type: 'get-media',
+    label: 'Get Fresh Media',
+    description: 'Draw fresh media from the reservoir.',
+    accent: 'sky',
+    container: false,
+    targetsWell: false,
     defaults: { volume: 200 },
+  },
+  'to-waste': {
+    type: 'to-waste',
+    label: 'Deposit to Waste',
+    description: 'Expel liquid into the waste hub.',
+    accent: 'slate',
+    container: false,
+    targetsWell: false,
+    defaults: { volume: 200 },
+  },
+  mix: {
+    type: 'mix',
+    label: 'Mix Well',
+    description: 'Pipette up and down to mix one well.',
+    accent: 'indigo',
+    container: false,
+    targetsWell: true,
+    defaults: { well: '', volume: 150, cycles: 5 },
   },
   wait: {
     type: 'wait',
@@ -27,6 +61,7 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
     description: 'Pause for a fixed incubation time.',
     accent: 'amber',
     container: false,
+    targetsWell: false,
     defaults: { duration: 24, unit: 'hours' },
   },
   loop: {
@@ -35,11 +70,20 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
     description: 'Repeat the contained steps N times.',
     accent: 'violet',
     container: true,
+    targetsWell: false,
     defaults: { repetitions: 3 },
   },
 }
 
-export const BLOCK_ORDER: BlockType[] = ['remove-media', 'add-media', 'wait', 'loop']
+export const BLOCK_ORDER: BlockType[] = [
+  'aspirate',
+  'dispense',
+  'get-media',
+  'to-waste',
+  'mix',
+  'wait',
+  'loop',
+]
 
 export const WAIT_UNITS = ['seconds', 'minutes', 'hours'] as const
 
@@ -74,33 +118,55 @@ export function countSteps(steps: WorkflowStep[]): number {
 }
 
 /**
- * Operations performed per well for one pass of the protocol. Each leaf block
- * counts as one operation; a loop multiplies its children by the repetition
- * count. With one well this matches "wells × steps" for a flat protocol
- * (e.g. Remove + Add + Wait over 6 wells = 18).
+ * Total machine operations for one run of the protocol. Each leaf block is one
+ * operation; a loop multiplies its children by the repetition count.
  */
-export function operationsPerWell(steps: WorkflowStep[]): number {
+export function countOperations(steps: WorkflowStep[]): number {
   return steps.reduce((sum, step) => {
     if (step.type === 'loop') {
       const reps = Number(step.params.repetitions) || 0
-      return sum + reps * operationsPerWell(step.children ?? [])
+      return sum + reps * countOperations(step.children ?? [])
     }
     return sum + 1
   }, 0)
 }
 
-/** Estimated operations across the whole selected well set. */
-export function estimateOperations(steps: WorkflowStep[], wellCount: number): number {
-  return operationsPerWell(steps) * wellCount
+/** Distinct wells referenced anywhere in the routine (for the summary + map). */
+export function wellsUsed(steps: WorkflowStep[], out = new Set<string>()): Set<string> {
+  for (const step of steps) {
+    const w = step.params.well
+    if (typeof w === 'string' && w) out.add(w)
+    if (step.children) wellsUsed(step.children, out)
+  }
+  return out
+}
+
+/** True when a well-targeted block has no well assigned yet. */
+export function stepNeedsWell(step: WorkflowStep): boolean {
+  return BLOCK_DEFINITIONS[step.type].targetsWell && !step.params.well
+}
+
+/** Any block in the tree still missing its target well. */
+export function hasUnassignedWells(steps: WorkflowStep[]): boolean {
+  return steps.some(
+    (s) => stepNeedsWell(s) || (s.children ? hasUnassignedWells(s.children) : false),
+  )
 }
 
 /** One-line human summary of a step for compact display. */
 export function describeStep(step: WorkflowStep): string {
+  const well = step.params.well ? String(step.params.well) : '—'
   switch (step.type) {
-    case 'remove-media':
-      return `Remove ${step.params.volume} µL`
-    case 'add-media':
-      return `Add ${step.params.volume} µL`
+    case 'aspirate':
+      return `Aspirate ${step.params.volume} µL from ${well}`
+    case 'dispense':
+      return `Dispense ${step.params.volume} µL to ${well}`
+    case 'get-media':
+      return `Get ${step.params.volume} µL fresh media`
+    case 'to-waste':
+      return `Waste ${step.params.volume} µL`
+    case 'mix':
+      return `Mix ${well} · ${step.params.cycles}×`
     case 'wait':
       return `Wait ${step.params.duration} ${step.params.unit}`
     case 'loop':

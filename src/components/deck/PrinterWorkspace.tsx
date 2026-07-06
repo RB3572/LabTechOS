@@ -215,9 +215,19 @@ function StlPlate({ model, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover 
     g.computeVertexNormals()
     g.computeBoundingBox()
     const bb = g.boundingBox!
-    g.translate(-bb.min.x, -bb.min.y, -bb.min.z)
+    // Normalize the mesh to its declared footprint so source units (some meshes
+    // are authored in metres) and minor size variance don't matter.
+    const sx = bb.max.x - bb.min.x
+    const sy = bb.max.y - bb.min.y
+    const sz = bb.max.z - bb.min.z
+    if (sx > 0 && sy > 0 && sz > 0) {
+      g.scale(model.width / sx, model.height / sy, model.depth / sz)
+    }
+    g.computeBoundingBox()
+    const bb2 = g.boundingBox!
+    g.translate(-bb2.min.x, -bb2.min.y, -bb2.min.z)
     return g
-  }, [geom, model.rotateX])
+  }, [geom, model.rotateX, model.width, model.height, model.depth])
 
   return (
     <mesh

@@ -256,37 +256,3 @@ export function compareWellIds(a: string, b: string): number {
   return pa.col - pb.col
 }
 
-/** Stable key for the currently selected well set (used to scope a workflow). */
-export function selectionKey(ids: string[]): string {
-  return [...ids].sort(compareWellIds).join(',')
-}
-
-/**
- * Collapse a selection into a compact, human label.
- * e.g. ["A1","A2","A3","B1","C3","C4"] -> "A1–A3, B1, C3–C4"
- */
-export function formatWellRanges(ids: string[]): string {
-  if (ids.length === 0) return ''
-  const parsed = [...ids].map(parseWellId).sort((a, b) =>
-    a.rowLabel === b.rowLabel ? a.col - b.col : a.rowLabel < b.rowLabel ? -1 : 1,
-  )
-
-  const parts: string[] = []
-  let i = 0
-  while (i < parsed.length) {
-    const start = parsed[i]
-    let end = start
-    let j = i + 1
-    while (
-      j < parsed.length &&
-      parsed[j].rowLabel === end.rowLabel &&
-      parsed[j].col === end.col + 1
-    ) {
-      end = parsed[j]
-      j++
-    }
-    parts.push(start.id === end.id ? start.id : `${start.id}–${end.id}`)
-    i = j
-  }
-  return parts.join(', ')
-}

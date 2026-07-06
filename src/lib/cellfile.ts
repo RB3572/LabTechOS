@@ -16,8 +16,7 @@ export interface PipetteCalibration {
 
 export interface CellConfig {
   plateType: PlateType
-  selectedWells: string[]
-  workflows: Record<string, WorkflowStep[]>
+  routine: WorkflowStep[]
   deck: DeckConfig
   bed: BedSize
   calibration?: { captured: Partial<Record<CalKey, Vec3>> }
@@ -61,11 +60,9 @@ export function parseCellFile(text: string): CellConfig {
   }
   return {
     plateType: data.plateType,
-    selectedWells: Array.isArray(data.selectedWells) ? data.selectedWells : [],
-    workflows:
-      data.workflows && typeof data.workflows === 'object' ? data.workflows : {},
+    routine: Array.isArray(data.routine) ? data.routine : [],
     deck: data.deck,
-    bed: data.bed ?? { x: 256, y: 256, z: 220 },
+    bed: data.bed ?? { x: 220, y: 220, z: 250 },
     calibration: data.calibration,
     pipette: data.pipette,
   }

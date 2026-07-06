@@ -73,14 +73,25 @@ export interface Project {
 // Workflow / protocol blocks
 // ---------------------------------------------------------------------------
 
-export type BlockType = 'remove-media' | 'add-media' | 'wait' | 'loop'
+/**
+ * Protocol primitives. Aspirate/dispense/mix each act on a single well;
+ * get-media/to-waste act on the shared reservoirs; wait/loop are control flow.
+ */
+export type BlockType =
+  | 'aspirate'
+  | 'dispense'
+  | 'get-media'
+  | 'to-waste'
+  | 'mix'
+  | 'wait'
+  | 'loop'
 
-/** Parameter values are keyed by name; numbers for volumes/durations, strings for units. */
+/** Parameter values are keyed by name; numbers for volumes/durations, strings for units + the target well. */
 export type StepParams = Record<string, number | string>
 
 /**
  * A single block in the protocol. `loop` blocks own a `children` array; all
- * other blocks are leaves.
+ * other blocks are leaves. Well-targeted blocks carry their well in `params.well`.
  */
 export interface WorkflowStep {
   id: string
@@ -92,15 +103,26 @@ export interface WorkflowStep {
 /** A protocol is just the ordered list of top-level steps. */
 export type Workflow = WorkflowStep[]
 
+export type BlockAccent =
+  | 'rose'
+  | 'emerald'
+  | 'amber'
+  | 'violet'
+  | 'sky'
+  | 'slate'
+  | 'indigo'
+
 /** Static description of a block type used by the library + renderers. */
 export interface BlockDefinition {
   type: BlockType
   label: string
   description: string
   /** Tailwind tint tokens for the block's accent treatment. */
-  accent: 'rose' | 'emerald' | 'amber' | 'violet'
+  accent: BlockAccent
   /** Whether this block can contain nested children. */
   container: boolean
+  /** Whether this block acts on a single, user-chosen well. */
+  targetsWell: boolean
   /** Default parameter values when the block is first dropped. */
   defaults: StepParams
 }

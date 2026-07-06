@@ -1,10 +1,9 @@
-import { CheckSquare, Grid3x3, LayoutGrid, XSquare } from 'lucide-react'
+import { Grid3x3, LayoutGrid } from 'lucide-react'
 import type { Plate, PlateType } from '@/types'
 import { useStore } from '@/store/useStore'
 import { PLATE_OPTIONS } from '@/lib/plate'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 
 function SpecRow({ label, value }: { label: string; value: string }) {
   return (
@@ -18,9 +17,6 @@ function SpecRow({ label, value }: { label: string; value: string }) {
 export function PlateControls({ plate }: { plate: Plate }) {
   const plateType = useStore((s) => s.plateType)
   const setPlateType = useStore((s) => s.setPlateType)
-  const selectAll = useStore((s) => s.selectAll)
-  const clearSelection = useStore((s) => s.clearSelection)
-  const selectedCount = useStore((s) => s.selectedWells.length)
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto scrollbar-thin">
@@ -66,38 +62,20 @@ export function PlateControls({ plate }: { plate: Plate }) {
         </div>
       </section>
 
-      {/* Selection tools */}
+      {/* How-to */}
       <section>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Selection
-          </span>
-          <span className="text-xs font-medium text-muted-foreground tnum">
-            {selectedCount} selected
-          </span>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Building a Routine
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" size="sm" onClick={selectAll}>
-            <CheckSquare className="size-4" />
-            Select All
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearSelection}
-            disabled={selectedCount === 0}
-          >
-            <XSquare className="size-4" />
-            Clear
-          </Button>
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          Click a well to select it. Hold{' '}
-          <kbd className="rounded border border-border bg-secondary px-1 font-mono text-[10px]">
-            ⌘
-          </kbd>{' '}
-          to add wells, drag to sweep, or click a row / column header to select a
-          whole line.
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Add blocks in the builder to the right. Each{' '}
+          <span className="font-medium text-foreground">aspirate</span>,{' '}
+          <span className="font-medium text-foreground">dispense</span>, or{' '}
+          <span className="font-medium text-foreground">mix</span> block works on
+          a single well — select the block, then click its well on the map.{' '}
+          <span className="font-medium text-foreground">Get Fresh Media</span> and{' '}
+          <span className="font-medium text-foreground">Deposit to Waste</span> use
+          the reservoirs directly.
         </p>
       </section>
     </div>

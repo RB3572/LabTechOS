@@ -11,21 +11,13 @@ import type {
   StepParams,
   WorkflowStep,
 } from '@/types'
-import {
-  PLATES,
-  compareWellIds,
-  generateWells,
-  selectionKey,
-} from '@/lib/plate'
+import { PLATES } from '@/lib/plate'
 import { BED, PLATE_MODELS, RESERVOIR } from '@/lib/deck'
 import { type CalKey, type Vec3, computeDeckFromCalibration } from '@/lib/calibration'
 import type { GcodeProgram } from '@/lib/gcode'
 import type { CellConfig } from '@/lib/cellfile'
 import { createStep } from '@/lib/workflow'
 import { RECENT_PROJECTS } from '@/data/projects'
-
-// Shared empty reference so selectors don't return a fresh array each render.
-const EMPTY_STEPS: WorkflowStep[] = []
 
 // ---------------------------------------------------------------------------
 // Pure tree helpers for the (possibly nested) workflow step list
@@ -166,12 +158,13 @@ interface AppState {
   activeProjectId: string | null
   projects: Project[]
 
-  // labware + selection
+  // labware
   plateType: PlateType
-  selectedWells: string[]
 
-  // protocol — workflows scoped by selected well set
-  workflows: Record<string, WorkflowStep[]>
+  // protocol — a single ordered routine of per-well / reservoir steps
+  routine: WorkflowStep[]
+  /** The block currently being edited (its well is set by clicking the map). */
+  selectedStepId: string | null
 
   // deck / hardware layout
   deck: DeckConfig
@@ -241,15 +234,11 @@ interface AppState {
   commitPipette: () => void
   resetPipette: () => void
 
-  // selection actions
-  clickWell: (id: string, additive: boolean) => void
-  setSelection: (ids: string[]) => void
-  selectRow: (rowIndex: number, additive: boolean) => void
-  selectColumn: (colIndex: number, additive: boolean) => void
-  selectAll: () => void
-  clearSelection: () => void
+  // step selection + well assignment
+  selectStep: (id: string | null) => void
+  assignWellToSelected: (wellId: string) => void
 
-  // workflow actions (operate on the active well set's workflow)
+  // workflow actions (operate on the single routine)
   addStep: (type: BlockType) => void
   addChildStep: (parentId: string, type: BlockType) => void
   insertStep: (type: BlockType, targetId: string, before: boolean) => void
@@ -262,29 +251,9 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set, get) => {
-  /** Replace the active well set's workflow with the result of `mutate`. */
-  const mutateWorkflow = (mutate: (steps: WorkflowStep[]) => WorkflowStep[]) => {
-    const key = selectionKey(get().selectedWells)
-    set((state) => ({
-      workflows: {
-        ...state.workflows,
-        [key]: mutate(state.workflows[key] ?? []),
-      },
-      gcode: null,
-    }))
-  }
-
-  /** Toggle a group (row/col/all) on or off, or replace the selection with it. */
-  const applyGroupSelect = (ids: string[], additive: boolean) => {
-    if (!additive) {
-      get().setSelection(ids)
-      return
-    }
-    const current = new Set(get().selectedWells)
-    const allSelected = ids.every((id) => current.has(id))
-    if (allSelected) ids.forEach((id) => current.delete(id))
-    else ids.forEach((id) => current.add(id))
-    get().setSelection([...current])
+  /** Replace the routine with the result of `mutate`. */
+  const mutateRoutine = (mutate: (steps: WorkflowStep[]) => WorkflowStep[]) => {
+    set((state) => ({ routine: mutate(state.routine), gcode: null }))
   }
 
   return {
@@ -293,14 +262,14 @@ export const useStore = create<AppState>((set, get) => {
     projects: RECENT_PROJECTS,
 
     plateType: '96-well',
-    selectedWells: [],
 
-    workflows: {},
+    routine: [],
+    selectedStepId: null,
 
     deck: {
       plate: { x: 12, y: 12, z: 1.5 },
-      freshMedia: { x: 142.5, y: 12, height: RESERVOIR.height },
-      waste: { x: 142.5, y: 230, height: RESERVOIR.height },
+      freshMedia: { x: 160, y: 14, height: RESERVOIR.height },
+      waste: { x: 160, y: 120, height: RESERVOIR.height },
     },
     bed: { ...BED },
     snapToGrid: false,
@@ -333,7 +302,7 @@ export const useStore = create<AppState>((set, get) => {
         page: 'plate-setup',
         activeProjectId: projectId,
         plateType: project ? project.plate : get().plateType,
-        selectedWells: [],
+        selectedStepId: null,
         gcode: null,
       })
     },
@@ -342,7 +311,7 @@ export const useStore = create<AppState>((set, get) => {
       set({
         page: 'plate-setup',
         activeProjectId: null,
-        selectedWells: [],
+        selectedStepId: null,
         gcode: null,
       }),
 
@@ -352,8 +321,7 @@ export const useStore = create<AppState>((set, get) => {
       const s = get()
       return {
         plateType: s.plateType,
-        selectedWells: s.selectedWells,
-        workflows: s.workflows,
+        routine: s.routine,
         deck: s.deck,
         bed: s.bed,
         calibration: { captured: s.calibration.captured },
@@ -370,8 +338,8 @@ export const useStore = create<AppState>((set, get) => {
       set((s) => ({
         page: 'deck-setup',
         plateType: cfg.plateType,
-        selectedWells: cfg.selectedWells ?? [],
-        workflows: cfg.workflows ?? {},
+        routine: cfg.routine ?? [],
+        selectedStepId: null,
         deck: cfg.deck,
         bed: cfg.bed,
         calibration: {
@@ -382,8 +350,7 @@ export const useStore = create<AppState>((set, get) => {
         gcode: null,
       })),
 
-    setPlateType: (type) =>
-      set({ plateType: type, selectedWells: [], gcode: null }),
+    setPlateType: (type) => set({ plateType: type, gcode: null }),
 
     setDeckObject: (key, pos) =>
       set((state) => ({
@@ -489,57 +456,61 @@ export const useStore = create<AppState>((set, get) => {
     resetPipette: () =>
       set((s) => ({ pipette: { ...s.pipette, source: null, ePosition: 0 } })),
 
-    clickWell: (id, additive) => {
-      const current = new Set(get().selectedWells)
-      if (additive) {
-        if (current.has(id)) current.delete(id)
-        else current.add(id)
-        get().setSelection([...current])
-      } else {
-        get().setSelection([id])
-      }
+    selectStep: (id) => set({ selectedStepId: id }),
+
+    // Assign the clicked well to the currently-selected block (no-op unless the
+    // selected block actually targets a well).
+    assignWellToSelected: (wellId) => {
+      const id = get().selectedStepId
+      if (!id) return
+      const step = findStep(get().routine, id)
+      if (!step || step.type === 'wait' || step.type === 'loop') return
+      if (!('well' in createStep(step.type).params)) return
+      mutateRoutine((steps) => updateParamsInTree(steps, id, { well: wellId }))
     },
 
-    setSelection: (ids) =>
-      set({ selectedWells: [...new Set(ids)].sort(compareWellIds) }),
+    addStep: (type) =>
+      set((state) => {
+        const step = createStep(type)
+        return {
+          routine: [...state.routine, step],
+          gcode: null,
+          // Auto-select a new well-targeted block so the map is ready to assign.
+          selectedStepId: step.params.well !== undefined ? step.id : state.selectedStepId,
+        }
+      }),
 
-    selectRow: (rowIndex, additive) => {
-      const plate = PLATES[get().plateType]
-      const ids = plate.colLabels.map((c) => `${plate.rowLabels[rowIndex]}${c}`)
-      applyGroupSelect(ids, additive)
+    addChildStep: (parentId, type) => {
+      const step = createStep(type)
+      set((state) => ({
+        routine: addChildToTree(state.routine, parentId, step),
+        gcode: null,
+        selectedStepId: step.params.well !== undefined ? step.id : state.selectedStepId,
+      }))
     },
-
-    selectColumn: (colIndex, additive) => {
-      const plate = PLATES[get().plateType]
-      const ids = plate.rowLabels.map((r) => `${r}${plate.colLabels[colIndex]}`)
-      applyGroupSelect(ids, additive)
-    },
-
-    selectAll: () => {
-      const plate = PLATES[get().plateType]
-      get().setSelection(generateWells(plate).map((w) => w.id))
-    },
-
-    clearSelection: () => set({ selectedWells: [] }),
-
-    addStep: (type) => mutateWorkflow((steps) => [...steps, createStep(type)]),
-
-    addChildStep: (parentId, type) =>
-      mutateWorkflow((steps) => addChildToTree(steps, parentId, createStep(type))),
 
     updateStepParams: (id, params) =>
-      mutateWorkflow((steps) => updateParamsInTree(steps, id, params)),
+      mutateRoutine((steps) => updateParamsInTree(steps, id, params)),
 
-    insertStep: (type, targetId, before) =>
-      mutateWorkflow((steps) =>
-        insertRelativeToTarget(steps, targetId, createStep(type), before),
-      ),
+    insertStep: (type, targetId, before) => {
+      const step = createStep(type)
+      set((state) => ({
+        routine: insertRelativeToTarget(state.routine, targetId, step, before),
+        gcode: null,
+        selectedStepId: step.params.well !== undefined ? step.id : state.selectedStepId,
+      }))
+    },
 
-    removeStep: (id) => mutateWorkflow((steps) => removeFromTree(steps, id)),
+    removeStep: (id) =>
+      set((state) => ({
+        routine: removeFromTree(state.routine, id),
+        gcode: null,
+        selectedStepId: state.selectedStepId === id ? null : state.selectedStepId,
+      })),
 
     moveStep: (dragId, targetId, before) => {
       if (dragId === targetId) return
-      mutateWorkflow((steps) => {
+      mutateRoutine((steps) => {
         const node = findStep(steps, dragId)
         // Abort if the block doesn't exist or we'd nest it inside itself.
         if (!node || subtreeIds(node).has(targetId)) return steps
@@ -550,7 +521,7 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     moveStepToEnd: (dragId, parentId) => {
-      mutateWorkflow((steps) => {
+      mutateRoutine((steps) => {
         const node = findStep(steps, dragId)
         if (!node) return steps
         if (parentId !== null && subtreeIds(node).has(parentId)) return steps
@@ -566,14 +537,12 @@ export const useStore = create<AppState>((set, get) => {
 // Selectors
 // ---------------------------------------------------------------------------
 
-/** The workflow steps belonging to the currently selected well set. */
-export function useActiveWorkflow(): WorkflowStep[] {
-  return useStore((s) => s.workflows[selectionKey(s.selectedWells)] ?? EMPTY_STEPS)
+/** The single ordered protocol routine. */
+export function useRoutine(): WorkflowStep[] {
+  return useStore((s) => s.routine)
 }
 
 /** A plate is "configured" once at least one protocol step has been defined. */
 export function usePlateConfigured(): boolean {
-  return useStore((s) =>
-    Object.values(s.workflows).some((steps) => steps.length > 0),
-  )
+  return useStore((s) => s.routine.length > 0)
 }

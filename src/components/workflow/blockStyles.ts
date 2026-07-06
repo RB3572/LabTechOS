@@ -1,8 +1,11 @@
 import {
   ArrowDownToLine,
+  ArrowUpDown,
   ArrowUpFromLine,
   Clock,
+  Droplet,
   Repeat,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import type { BlockType } from '@/types'
@@ -20,8 +23,11 @@ export type BlockDragItem =
   | { kind: 'move'; id: string }
 
 export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
-  'remove-media': ArrowUpFromLine,
-  'add-media': ArrowDownToLine,
+  aspirate: ArrowUpFromLine,
+  dispense: ArrowDownToLine,
+  'get-media': Droplet,
+  'to-waste': Trash2,
+  mix: ArrowUpDown,
   wait: Clock,
   loop: Repeat,
 }
@@ -43,6 +49,21 @@ export const ACCENTS: Record<string, AccentStyle> = {
     icon: 'bg-emerald-50 text-emerald-600 ring-emerald-600/15',
     bar: 'bg-emerald-400',
     chip: 'hover:border-emerald-300 hover:bg-emerald-50/40',
+  },
+  sky: {
+    icon: 'bg-sky-50 text-sky-600 ring-sky-600/15',
+    bar: 'bg-sky-400',
+    chip: 'hover:border-sky-300 hover:bg-sky-50/40',
+  },
+  slate: {
+    icon: 'bg-slate-100 text-slate-600 ring-slate-600/15',
+    bar: 'bg-slate-400',
+    chip: 'hover:border-slate-300 hover:bg-slate-50/60',
+  },
+  indigo: {
+    icon: 'bg-indigo-50 text-indigo-600 ring-indigo-600/15',
+    bar: 'bg-indigo-400',
+    chip: 'hover:border-indigo-300 hover:bg-indigo-50/40',
   },
   amber: {
     icon: 'bg-amber-50 text-amber-600 ring-amber-600/15',

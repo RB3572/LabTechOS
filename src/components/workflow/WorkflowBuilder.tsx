@@ -1,8 +1,7 @@
 import { useDragLayer, useDrop } from 'react-dnd'
 import { Layers, Trash2, Workflow as WorkflowIcon } from 'lucide-react'
-import { useActiveWorkflow, useStore } from '@/store/useStore'
-import { countSteps, estimateOperations } from '@/lib/workflow'
-import { formatWellRanges } from '@/lib/plate'
+import { useRoutine, useStore } from '@/store/useStore'
+import { countOperations, countSteps, wellsUsed } from '@/lib/workflow'
 import { cn } from '@/lib/utils'
 import { BlockLibrary } from './BlockLibrary'
 import { StepList } from './WorkflowBlock'
@@ -54,10 +53,9 @@ function SummaryStat({
 }
 
 export function WorkflowBuilder() {
-  const selectedWells = useStore((s) => s.selectedWells)
   const addStep = useStore((s) => s.addStep)
   const moveStepToEnd = useStore((s) => s.moveStepToEnd)
-  const workflow = useActiveWorkflow()
+  const workflow = useRoutine()
 
   const [{ isOver }, drop] = useDrop(
     () => ({
@@ -75,9 +73,9 @@ export function WorkflowBuilder() {
     [addStep, moveStepToEnd],
   )
 
-  const wellSummary = formatWellRanges(selectedWells)
   const stepCount = countSteps(workflow)
-  const operations = estimateOperations(workflow, selectedWells.length)
+  const operations = countOperations(workflow)
+  const wellCount = wellsUsed(workflow).size
 
   return (
     <div className="flex h-full flex-col">
@@ -98,12 +96,10 @@ export function WorkflowBuilder() {
         <BlockLibrary />
       </div>
 
-      {/* Selected wells label — the workflow belongs to this set */}
-      <div className="flex items-center gap-2 px-4 py-2.5 text-sm">
-        <span className="text-muted-foreground">Selected Wells:</span>
-        <span className="truncate font-mono text-[13px] font-medium text-foreground">
-          {wellSummary || <span className="font-sans text-muted-foreground">none</span>}
-        </span>
+      {/* Hint — how per-well blocks get their target */}
+      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground">
+        Select an aspirate / dispense / mix block, then click a well on the map
+        to target it.
       </div>
 
       {/* Canvas (drop target) */}
@@ -148,9 +144,9 @@ export function WorkflowBuilder() {
           Workflow Summary
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <SummaryStat label="Selected Wells" value={selectedWells.length} />
+          <SummaryStat label="Wells Used" value={wellCount} />
           <SummaryStat label="Steps" value={stepCount} />
-          <SummaryStat label="Est. Operations" value={operations} accent />
+          <SummaryStat label="Operations" value={operations} accent />
         </div>
       </div>
     </div>
