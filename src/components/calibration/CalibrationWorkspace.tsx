@@ -98,6 +98,16 @@ export function CalibrationWorkspace() {
   const step = cal.activeStep >= 0 ? CAL_STEPS[cal.activeStep] : null
   const targets = calTargets(deck, plate, model)
   const target = step ? targets[step.key] : null
+
+  // Only reveal objects that have somewhere real to sit. While a step is active,
+  // show just the object being calibrated (floating on the empty bed) so nothing
+  // implies a placement that hasn't been captured yet. Once every point is set,
+  // show the whole deck assembled at its calibrated coordinates.
+  const allDone = CAL_STEPS.every((s) => cal.captured[s.key])
+  const activeKind = step ? (step.group === 'plate' ? 'plate' : step.key) : null
+  const showPlate = step ? activeKind === 'plate' : allDone
+  const showFresh = step ? activeKind === 'fresh' : allDone
+  const showWaste = step ? activeKind === 'waste' : allDone
   const stepColor = !step
     ? '#2563eb'
     : step.group === 'plate'
@@ -122,11 +132,17 @@ export function CalibrationWorkspace() {
         <Bed bed={bed} />
         <AxisLabels bed={bed} />
 
-        <Suspense fallback={null}>
-          <PlateModel model={model} plate={plate} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
-        </Suspense>
-        <Reservoir x={deck.freshMedia.x} y={deck.freshMedia.y} hx={hx} hy={hy} height={deck.freshMedia.height} color="#ec4899" outOfBounds={!withinBed(freshF, bed)} nozzleRef={nozzleRef} />
-        <Reservoir x={deck.waste.x} y={deck.waste.y} hx={hx} hy={hy} height={deck.waste.height} color="#475569" outOfBounds={!withinBed(wasteF, bed)} nozzleRef={nozzleRef} />
+        {showPlate && (
+          <Suspense fallback={null}>
+            <PlateModel model={model} plate={plate} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
+          </Suspense>
+        )}
+        {showFresh && (
+          <Reservoir x={deck.freshMedia.x} y={deck.freshMedia.y} hx={hx} hy={hy} height={deck.freshMedia.height} color="#ec4899" outOfBounds={!withinBed(freshF, bed)} nozzleRef={nozzleRef} />
+        )}
+        {showWaste && (
+          <Reservoir x={deck.waste.x} y={deck.waste.y} hx={hx} hy={hy} height={deck.waste.height} color="#475569" outOfBounds={!withinBed(wasteF, bed)} nozzleRef={nozzleRef} />
+        )}
 
         {/* Live toolhead at the tracked machine position */}
         <group position={[th.x - hx, th.z, th.y - hy]}>
@@ -134,6 +150,15 @@ export function CalibrationWorkspace() {
         </group>
 
         {target && <Guide target={target} color={stepColor} hx={hx} hy={hy} />}
+
+        {/* Empty state — before any step is picked, the bed sits bare. */}
+        {!step && !allDone && (
+          <Html position={[0, 24, 0]} center style={{ pointerEvents: 'none' }}>
+            <div className="whitespace-nowrap rounded-full border border-border bg-white/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur">
+              Pick a calibration step to begin
+            </div>
+          </Html>
+        )}
 
         <ContactShadows position={[0, 0.14, 0]} scale={Math.max(bed.x, bed.y) * 1.5} blur={2.4} far={70} opacity={0.18} color="#1e3a8a" />
       </Suspense>
