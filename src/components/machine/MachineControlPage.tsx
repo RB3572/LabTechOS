@@ -51,6 +51,7 @@ const COMMAND_GROUPS: { group: string; items: { label: string; cmd: string; dang
     group: 'Machine',
     items: [
       { label: 'Motors Off', cmd: 'M84' },
+      { label: 'Allow Cold Extrude', cmd: 'M302 P1' },
       { label: 'Fan On', cmd: 'M106' },
       { label: 'Fan Off', cmd: 'M107' },
       { label: 'Firmware Info', cmd: 'M115' },
