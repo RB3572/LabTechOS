@@ -21,8 +21,8 @@ import { cn } from '@/lib/utils'
 
 const FEED = 1500
 const STEP_SIZES = [0.1, 1, 10]
-const SYRINGE_STEPS = [0.5, 1, 5]
-const SYRINGE_FEED = 200
+const SYRINGE_STEPS = [10, 20, 50]
+const SYRINGE_FEEDS = [100, 200, 500] // extruder speed presets (mm/min)
 
 interface LogEntry {
   dir: 'tx' | 'rx' | 'sys'
@@ -93,7 +93,8 @@ export function MachineControlPage() {
   const jogToolhead = useStore((s) => s.jogToolhead)
   const setJogStep = useStore((s) => s.setJogStep)
 
-  const [syringeStep, setSyringeStep] = useState(1)
+  const [syringeStep, setSyringeStep] = useState(20)
+  const [syringeFeed, setSyringeFeed] = useState(200)
   const [syringePos, setSyringePos] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
   const [command, setCommand] = useState('')
@@ -169,12 +170,12 @@ export function MachineControlPage() {
   const moveSyringe = (delta: number) => {
     setSyringePos((p) => Math.round((p + delta) * 100) / 100)
     if (cal.connected) {
-      ;['M83', `G1 E${delta} F${SYRINGE_FEED}`].forEach((l) => {
+      ;['M83', `G1 E${delta} F${syringeFeed}`].forEach((l) => {
         void serial.send(l)
         append('tx', l)
       })
     } else {
-      append('sys', `Syringe ${delta > 0 ? 'advance' : 'retract'} ${Math.abs(delta)} mm (offline — not sent)`)
+      append('sys', `Syringe ${delta > 0 ? 'advance' : 'retract'} ${Math.abs(delta)} mm at ${syringeFeed} mm/min (offline — not sent)`)
     }
   }
 
@@ -310,6 +311,9 @@ export function MachineControlPage() {
             </span>
           </div>
 
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Distance
+          </div>
           <div className="mb-3 flex gap-1.5">
             {SYRINGE_STEPS.map((s) => (
               <button
@@ -323,6 +327,26 @@ export function MachineControlPage() {
                 )}
               >
                 {s} mm
+              </button>
+            ))}
+          </div>
+
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Speed
+          </div>
+          <div className="mb-3 flex gap-1.5">
+            {SYRINGE_FEEDS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setSyringeFeed(f)}
+                className={cn(
+                  'flex-1 rounded-md border py-1.5 text-xs font-semibold transition-colors',
+                  syringeFeed === f
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {f} mm/min
               </button>
             ))}
           </div>
