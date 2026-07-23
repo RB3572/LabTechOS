@@ -8,8 +8,50 @@ import type { BedSize, DeckConfig, ObjectStatus, Plate, PlateType } from '@/type
 // Default build volume — Creality Ender 3 SE (220 × 220 × 250 mm).
 export const BED: BedSize = { x: 220, y: 220, z: 250 }
 
-/** Media / waste reservoirs are modelled as a rounded rectangular prism. */
-export const RESERVOIR = { width: 30, depth: 20, height: 34, radius: 4 }
+/**
+ * Media / waste reservoirs are 50 mL Falcon tubes seated in a round stand,
+ * matching `falconTubeModel.stl`. The tube's mouth sits high above the deck, so
+ * the pipette must dip down the bore to reach liquid and climb back out to
+ * `clearanceZ` before it can travel anywhere else.
+ */
+export const RESERVOIR = {
+  /** Stand footprint (mm) — the tube is centred within it. */
+  width: 80,
+  depth: 80,
+  /** Overall height to the tube's open mouth (mm). */
+  height: 115,
+  /** Inner bore radius (mm) — the liquid column and the pipette's dip target. */
+  bore: 15,
+  /** Tube floor above the deck (mm) — how deep the pipette can dip. */
+  floor: 3,
+}
+
+export const RESERVOIR_MODEL = {
+  url: '/models/falconTubeModel.stl',
+  /** Rotation (radians) about X that makes the Z-up mesh Y-up for the scene. */
+  rotateX: -Math.PI / 2,
+}
+
+/** Extra headroom (mm) above the tallest labware for safe XY travel. */
+export const CLEARANCE_MARGIN = 10
+
+/**
+ * Lowest Z the pipette can travel at without clipping labware — the tube mouths
+ * and the plate, plus a margin. Used as the fallback when the user hasn't
+ * captured a clearance height during calibration.
+ */
+export function defaultClearanceZ(
+  deck: DeckConfig,
+  plateHeight: number,
+): number {
+  return (
+    Math.max(
+      deck.plate.z + plateHeight,
+      deck.freshMedia.height,
+      deck.waste.height,
+    ) + CLEARANCE_MARGIN
+  )
+}
 
 /** Objects closer than this (mm) raise a proximity warning. */
 export const PROXIMITY_THRESHOLD = 15

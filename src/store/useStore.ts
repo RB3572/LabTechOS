@@ -266,10 +266,11 @@ export const useStore = create<AppState>((set, get) => {
     routine: [],
     selectedStepId: null,
 
+    // Plate along the front edge; the two 80 mm tube stands sit behind it.
     deck: {
       plate: { x: 12, y: 12, z: 1.5 },
-      freshMedia: { x: 160, y: 14, height: RESERVOIR.height },
-      waste: { x: 160, y: 120, height: RESERVOIR.height },
+      freshMedia: { x: 12, y: 130, height: RESERVOIR.height },
+      waste: { x: 110, y: 130, height: RESERVOIR.height },
     },
     bed: { ...BED },
     snapToGrid: false,

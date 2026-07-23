@@ -21,6 +21,7 @@ import { PLATES } from '@/lib/plate'
 import {
   PLATE_MODELS,
   RESERVOIR,
+  RESERVOIR_MODEL,
   type Footprint,
   type PlateModelDef,
   clearances,
@@ -474,6 +475,114 @@ function Liquid({
   )
 }
 
+/** The Falcon-tube mesh (tube + round stand), normalized to the deck footprint. */
+function FalconTube({
+  cx,
+  cz,
+  w,
+  d,
+  h,
+  outOfBounds,
+}: {
+  cx: number
+  cz: number
+  w: number
+  d: number
+  h: number
+  outOfBounds: boolean
+}) {
+  const geom = useLoader(STLLoader, RESERVOIR_MODEL.url)
+  const prepared = useMemo(() => {
+    const g = geom.clone()
+    g.rotateX(RESERVOIR_MODEL.rotateX)
+    g.computeVertexNormals()
+    g.computeBoundingBox()
+    const bb = g.boundingBox!
+    const sx = bb.max.x - bb.min.x
+    const sy = bb.max.y - bb.min.y
+    const sz = bb.max.z - bb.min.z
+    if (sx > 0 && sy > 0 && sz > 0) g.scale(w / sx, h / sy, d / sz)
+    g.computeBoundingBox()
+    const bb2 = g.boundingBox!
+    // Centre the footprint on the origin so the group can sit at (cx, cz).
+    g.translate(-(bb2.min.x + bb2.max.x) / 2, -bb2.min.y, -(bb2.min.z + bb2.max.z) / 2)
+    return g
+  }, [geom, w, d, h])
+
+  return (
+    <mesh geometry={prepared} position={[cx, 0, cz]} castShadow>
+      <meshPhysicalMaterial
+        color={outOfBounds ? '#fca5a5' : '#eaf2ff'}
+        roughness={0.08}
+        metalness={0}
+        transparent
+        opacity={0.32}
+        depthWrite={false}
+        ior={1.45}
+        clearcoat={1}
+        clearcoatRoughness={0.05}
+        envMapIntensity={1.6}
+      />
+    </mesh>
+  )
+}
+
+/**
+ * Liquid column standing in the tube's bore. The surface bobs gently and dips
+ * when the pipette enters, standing in for the box-shaped slosh sim that suited
+ * the old rectangular reservoirs.
+ */
+function TubeLiquid({
+  cx,
+  cz,
+  floor,
+  bore,
+  height,
+  color,
+  mx,
+  my,
+  nozzleRef,
+}: {
+  cx: number
+  cz: number
+  floor: number
+  bore: number
+  height: number
+  color: string
+  mx: number
+  my: number
+  nozzleRef?: NozzleRef
+}) {
+  const body = useRef<THREE.Mesh>(null!)
+  // Fill the lower half of the bore — enough to read as "full" from any angle.
+  const fill = (height - floor) * 0.45
+  const r = bore * 0.92
+
+  // One mesh, scaled from its base, so there's no surface disc to z-fight with
+  // the cylinder cap. The level breathes gently and drops while the tip is in.
+  useFrame((state) => {
+    if (!body.current) return
+    const t = state.clock.elapsedTime
+    const n = nozzleRef?.current
+    const inside =
+      n &&
+      Math.hypot(n.x - (mx + RESERVOIR.width / 2), n.y - (my + RESERVOIR.depth / 2)) < bore &&
+      n.z < floor + fill + 12
+    const level = 1 + Math.sin(t * 1.6) * 0.004 + (inside ? -0.02 : 0)
+    body.current.scale.y = level
+    body.current.position.y = (fill * level) / 2
+  })
+
+  return (
+    <group position={[cx, floor, cz]}>
+      <mesh ref={body} position={[0, fill / 2, 0]}>
+        <cylinderGeometry args={[r, r * 0.86, fill, 32]} />
+        <meshStandardMaterial color={color} roughness={0.15} metalness={0.12} emissive={color} emissiveIntensity={0.14} />
+      </mesh>
+    </group>
+  )
+}
+
 export function Reservoir({
   x,
   y,
@@ -497,7 +606,7 @@ export function Reservoir({
   onHover?: (over: boolean) => void
   nozzleRef?: NozzleRef
 }) {
-  const { width: w, depth: d, radius } = RESERVOIR
+  const { width: w, depth: d, bore, floor } = RESERVOIR
   const cx = x + w / 2 - hx
   const cz = y + d / 2 - hy
   const tint = outOfBounds ? '#ef4444' : color
@@ -514,32 +623,12 @@ export function Reservoir({
         onHover?.(false)
       }}
     >
-      <Liquid w={w} d={d} h={h} radius={radius} cx={cx} cz={cz} mx={x} my={y} color={tint} nozzleRef={nozzleRef} />
-      <RoundedBox args={[w, h, d]} radius={radius} smoothness={5} position={[cx, h / 2, cz]} castShadow>
-        <meshPhysicalMaterial
-          color="#eaf2ff"
-          roughness={0.05}
-          metalness={0}
-          transparent
-          opacity={0.16}
-          depthWrite={false}
-          ior={1.45}
-          clearcoat={1}
-          clearcoatRoughness={0.04}
-          envMapIntensity={1.8}
-        />
-      </RoundedBox>
-      {/* rim — suggests the open top of a hollow vessel */}
-      <mesh position={[cx, h, cz]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[Math.min(w, d) * 0.32, Math.min(w, d) * 0.42, 24]} />
-        <meshStandardMaterial color="#dbe6f5" roughness={0.2} metalness={0.1} transparent opacity={0.5} side={THREE.DoubleSide} />
-      </mesh>
+      <TubeLiquid cx={cx} cz={cz} floor={floor} bore={bore} height={h} color={tint} mx={x} my={y} nozzleRef={nozzleRef} />
+      <Suspense fallback={null}>
+        <FalconTube cx={cx} cz={cz} w={w} d={d} h={h} outOfBounds={outOfBounds} />
+      </Suspense>
 
-      {/* Toolhead target — the (x, y) centre the pipette travels to */}
-      <mesh position={[cx, (h + 0.4) / 2, cz]}>
-        <cylinderGeometry args={[0.16, 0.16, Math.max(0.2, h - 0.4), 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.45} />
-      </mesh>
+      {/* Toolhead target — the (x, y) centre the pipette dips into */}
       <mesh position={[cx, h + 2, cz]}>
         <sphereGeometry args={[1.7, 20, 20]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} roughness={0.3} metalness={0.1} />

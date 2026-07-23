@@ -1,7 +1,12 @@
 import type { DeckConfig, Plate } from '@/types'
-import { PLATE_MODELS, RESERVOIR, type PlateModelDef } from '@/lib/deck'
+import {
+  PLATE_MODELS,
+  RESERVOIR,
+  defaultClearanceZ,
+  type PlateModelDef,
+} from '@/lib/deck'
 
-export type CalKey = 'well-tl' | 'well-br' | 'fresh' | 'waste'
+export type CalKey = 'well-tl' | 'well-br' | 'fresh' | 'waste' | 'clearance'
 
 export interface Vec3 {
   x: number
@@ -14,8 +19,11 @@ export interface CalStep {
   label: string
   short: string
   instruction: string
-  /** 'plate' steps reposition the plate; 'reservoir' steps move a container. */
-  group: 'plate' | 'reservoir'
+  /**
+   * 'plate' steps reposition the plate; 'reservoir' steps move a container;
+   * 'clearance' fixes the safe travel height above every object.
+   */
+  group: 'plate' | 'reservoir' | 'clearance'
 }
 
 export const CAL_STEPS: CalStep[] = [
@@ -41,7 +49,7 @@ export const CAL_STEPS: CalStep[] = [
     short: 'Media',
     group: 'reservoir',
     instruction:
-      'Jog to the centre of the fresh-media container and lower the pipette to its bottom.',
+      'Centre the pipette over the fresh-media tube, then lower it down the bore until it just touches the bottom. This is how deep it dips to draw liquid.',
   },
   {
     key: 'waste',
@@ -49,7 +57,15 @@ export const CAL_STEPS: CalStep[] = [
     short: 'Waste',
     group: 'reservoir',
     instruction:
-      'Jog to the centre of the waste container and lower the pipette to its bottom.',
+      'Centre the pipette over the waste tube and lower it down the bore until it just touches the bottom.',
+  },
+  {
+    key: 'clearance',
+    label: 'Travel Clearance',
+    short: 'Clear',
+    group: 'clearance',
+    instruction:
+      'Raise Z until the pipette tip clears the tube mouths and the plate with room to spare, then set it. Every move between the tubes and the plate happens at this height.',
   },
 ]
 
@@ -88,12 +104,18 @@ export function calTargets(
     fresh: {
       x: deck.freshMedia.x + RESERVOIR.width / 2,
       y: deck.freshMedia.y + RESERVOIR.depth / 2,
-      z: 2,
+      z: RESERVOIR.floor,
     },
     waste: {
       x: deck.waste.x + RESERVOIR.width / 2,
       y: deck.waste.y + RESERVOIR.depth / 2,
-      z: 2,
+      z: RESERVOIR.floor,
+    },
+    // Clearance is a height, not a place — guide the user above the fresh tube.
+    clearance: {
+      x: deck.freshMedia.x + RESERVOIR.width / 2,
+      y: deck.freshMedia.y + RESERVOIR.depth / 2,
+      z: defaultClearanceZ(deck, plate.height),
     },
   }
 }
@@ -106,6 +128,11 @@ export interface CalibrationResult {
   waste?: { x: number; y: number }
   /** Nozzle Z at the well bottom — the safe pipetting depth to bake into G-code. */
   nozzleZ?: number
+  /** Nozzle Z at each tube's floor — how far the pipette dips to reach liquid. */
+  freshZ?: number
+  wasteZ?: number
+  /** Safe Z for XY travel, clearing the tube mouths and the plate. */
+  travelZ?: number
 }
 
 /**
@@ -137,12 +164,15 @@ export function computeDeckFromCalibration(
       x: r1(captured.fresh.x - RESERVOIR.width / 2),
       y: r1(captured.fresh.y - RESERVOIR.depth / 2),
     }
+    out.freshZ = r1(captured.fresh.z)
   }
   if (captured.waste) {
     out.waste = {
       x: r1(captured.waste.x - RESERVOIR.width / 2),
       y: r1(captured.waste.y - RESERVOIR.depth / 2),
     }
+    out.wasteZ = r1(captured.waste.z)
   }
+  if (captured.clearance) out.travelZ = r1(captured.clearance.z)
   return out
 }

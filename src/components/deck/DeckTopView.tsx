@@ -169,19 +169,18 @@ export function DeckTopView() {
     const cy = f.y + f.d / 2
     return (
       <g key={key} className="cursor-grab" style={{ touchAction: 'none' }} onPointerDown={begin(key, pos)} {...hoverProps(key)}>
-        <rect
-          x={f.x}
-          y={f.y}
-          width={f.w}
-          height={f.d}
-          rx={RESERVOIR.radius}
+        {/* Round stand, with the tube bore drawn inside it */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={Math.min(f.w, f.d) / 2}
           fill="#ffffff"
           stroke={stroke}
           strokeWidth={on ? 2 : 1.1}
           style={{ transition: 'stroke-width 120ms ease-out' }}
         />
-        <rect x={f.x + 3} y={f.y + 3} width={f.w - 6} height={f.d - 6} rx={RESERVOIR.radius * 0.6} fill={stroke} opacity={0.18} />
-        {/* Toolhead target — container centre */}
+        <circle cx={cx} cy={cy} r={RESERVOIR.bore} fill={stroke} opacity={0.18} />
+        {/* Toolhead target — tube centre */}
         <circle cx={cx} cy={cy} r={3.4} fill="none" stroke={accent} strokeWidth={0.8} />
         <circle cx={cx} cy={cy} r={1.4} fill={accent} />
         <text x={cx} y={f.y - 3} textAnchor="middle" fontSize={6} fontWeight={600} fill="#475569">

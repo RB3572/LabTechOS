@@ -178,8 +178,17 @@ export function GCodePage() {
     if (!ready) return
     setSelected(null)
     setGenerating(true)
-    const nozzleZ = computeDeckFromCalibration(captured, plate).nozzleZ
-    const program = generateGcode({ deck, plate, routine, nozzleZ, ulToE: pipetteMmPerUl ?? 1 })
+    const cal = computeDeckFromCalibration(captured, plate)
+    const program = generateGcode({
+      deck,
+      plate,
+      routine,
+      nozzleZ: cal.nozzleZ,
+      freshZ: cal.freshZ,
+      wasteZ: cal.wasteZ,
+      travelZ: cal.travelZ,
+      ulToE: pipetteMmPerUl ?? 1,
+    })
     timer.current = window.setTimeout(() => {
       setGcode(program)
       setGenerating(false)

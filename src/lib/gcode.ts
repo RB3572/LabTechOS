@@ -7,7 +7,12 @@
 // ---------------------------------------------------------------------------
 
 import type { DeckConfig, Plate, WorkflowStep } from '@/types'
-import { PLATE_MODELS, RESERVOIR, type PlateModelDef } from '@/lib/deck'
+import {
+  PLATE_MODELS,
+  RESERVOIR,
+  defaultClearanceZ,
+  type PlateModelDef,
+} from '@/lib/deck'
 
 export interface Pt {
   x: number
@@ -102,6 +107,11 @@ export interface GenOptions {
   model?: PlateModelDef
   /** Calibrated nozzle Z (just above the well bottom); defaults to plate Z + 1. */
   nozzleZ?: number
+  /** Calibrated nozzle Z at each tube's floor — how deep the pipette dips. */
+  freshZ?: number
+  wasteZ?: number
+  /** Calibrated safe travel Z clearing the tube mouths; defaults to the tallest object + margin. */
+  travelZ?: number
   /** Calibrated extruder travel (mm) per microlitre; defaults to 1 (uncalibrated). */
   ulToE?: number
 }
@@ -122,12 +132,14 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
   const ulToE = opts.ulToE && opts.ulToE > 0 ? opts.ulToE : 1
   const positions = wellPositions(deck, plate, model)
 
-  const travelZ = f1(
-    Math.max(deck.plate.z + plate.height, deck.freshMedia.height, deck.waste.height) + 10,
-  )
+  // Travel height must clear the tube mouths, which stand far taller than the
+  // plate — a calibrated capture wins, otherwise fall back to the tallest object.
+  const travelZ = f1(opts.travelZ ?? defaultClearanceZ(deck, plate.height))
   const nozzleZ = opts.nozzleZ ?? f1(deck.plate.z + 1)
   const dispenseZ = f1(nozzleZ + 1.5)
-  const reservoirZ = 3
+  // How far down each tube's bore the pipette dips to reach liquid.
+  const freshZ = f1(opts.freshZ ?? RESERVOIR.floor)
+  const wasteZ = f1(opts.wasteZ ?? RESERVOIR.floor)
   const fresh = {
     x: f1(deck.freshMedia.x + RESERVOIR.width / 2),
     y: f1(deck.freshMedia.y + RESERVOIR.depth / 2),
@@ -199,12 +211,19 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
 
   // --- protocol primitives -------------------------------------------------
 
+  // Every XY move happens at clearance height — the tube mouths stand well above
+  // the plate, so crossing the deck any lower would clip them.
+  const travelTo = (x: number, y: number) => {
+    if (cur.z < travelZ) move({ z: travelZ }, Z_FEED, 'up')
+    move({ x, y }, TRAVEL_FEED, 'travel', 'G0')
+  }
+
   // Aspirate from a single well (draw liquid up out of it).
   const aspirateWell = (wellId: string, vol: number) => {
     const p = positions[wellId]
     if (!p) return
     comment(`Aspirate ${vol} uL from ${wellId}`)
-    move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
+    travelTo(p.x, p.y)
     move({ z: nozzleZ }, Z_FEED, 'down')
     extrude(vol, 'aspirate')
     move({ z: travelZ }, Z_FEED, 'up')
@@ -216,29 +235,34 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
     const p = positions[wellId]
     if (!p) return
     comment(`Dispense ${vol} uL to ${wellId}`)
-    move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
+    travelTo(p.x, p.y)
     move({ z: dispenseZ }, Z_FEED, 'down')
     extrude(vol, 'dispense')
     move({ z: travelZ }, Z_FEED, 'up')
     operations++
   }
 
-  // Draw fresh media from its reservoir.
+  // Draw fresh media: cross to the tube at clearance height, dip down the bore,
+  // aspirate, then climb back out before anything else moves in XY.
   const getMedia = (vol: number) => {
     comment(`Get ${vol} uL fresh media`)
-    move({ x: fresh.x, y: fresh.y }, TRAVEL_FEED, 'travel', 'G0')
-    move({ z: reservoirZ }, Z_FEED, 'down')
+    travelTo(fresh.x, fresh.y)
+    comment(`Dip down the bore to the tube floor Z${fmt(freshZ)}`)
+    move({ z: freshZ }, Z_FEED, 'down')
     extrude(vol, 'aspirate')
+    comment(`Withdraw to clearance Z${fmt(travelZ)}`)
     move({ z: travelZ }, Z_FEED, 'up')
     operations++
   }
 
-  // Expel liquid into the waste hub.
+  // Expel liquid into the waste tube — same dip-and-withdraw cycle.
   const toWaste = (vol: number) => {
     comment(`Deposit ${vol} uL to waste`)
-    move({ x: waste.x, y: waste.y }, TRAVEL_FEED, 'travel', 'G0')
-    move({ z: reservoirZ }, Z_FEED, 'down')
+    travelTo(waste.x, waste.y)
+    comment(`Dip down the bore to the tube floor Z${fmt(wasteZ)}`)
+    move({ z: wasteZ }, Z_FEED, 'down')
     extrude(vol, 'dispense')
+    comment(`Withdraw to clearance Z${fmt(travelZ)}`)
     move({ z: travelZ }, Z_FEED, 'up')
     operations++
   }
@@ -248,7 +272,7 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
     const p = positions[wellId]
     if (!p || cycles <= 0) return
     comment(`Mix ${wellId} — ${cycles} cycle${cycles === 1 ? '' : 's'} of ${vol} uL`)
-    move({ x: p.x, y: p.y }, TRAVEL_FEED, 'travel', 'G0')
+    travelTo(p.x, p.y)
     move({ z: nozzleZ }, Z_FEED, 'down')
     for (let i = 0; i < cycles; i++) {
       extrude(vol, 'aspirate')
@@ -303,7 +327,8 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
 
   comment('CellSlicer generated program')
   comment(`Plate: ${plate.name} (${plate.wellCount} wells)`)
-  comment(`Travel height ${fmt(travelZ)} mm · nozzle Z ${fmt(nozzleZ)} mm`)
+  comment(`Travel/clearance Z ${fmt(travelZ)} mm · well nozzle Z ${fmt(nozzleZ)} mm`)
+  comment(`Tube floors — fresh Z ${fmt(freshZ)} mm · waste Z ${fmt(wasteZ)} mm`)
   comment(
     ulToE === 1
       ? 'Pipette: uncalibrated (1 mm plunger = 1 uL)'

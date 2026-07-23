@@ -103,18 +103,23 @@ export function CalibrationWorkspace() {
   // show just the object being calibrated (floating on the empty bed) so nothing
   // implies a placement that hasn't been captured yet. Once every point is set,
   // show the whole deck assembled at its calibrated coordinates.
+  // The clearance step is the exception: judging safe travel height means seeing
+  // every object at once.
   const allDone = CAL_STEPS.every((s) => cal.captured[s.key])
+  const showAll = step ? step.group === 'clearance' : allDone
   const activeKind = step ? (step.group === 'plate' ? 'plate' : step.key) : null
-  const showPlate = step ? activeKind === 'plate' : allDone
-  const showFresh = step ? activeKind === 'fresh' : allDone
-  const showWaste = step ? activeKind === 'waste' : allDone
+  const showPlate = showAll || activeKind === 'plate'
+  const showFresh = showAll || activeKind === 'fresh'
+  const showWaste = showAll || activeKind === 'waste'
   const stepColor = !step
     ? '#2563eb'
     : step.group === 'plate'
       ? '#2563eb'
       : step.key === 'fresh'
         ? '#ec4899'
-        : '#475569'
+        : step.key === 'clearance'
+          ? '#059669'
+          : '#475569'
 
   const th = cal.toolhead
   const nozzleRef = useRef<{ x: number; y: number; z: number } | null>(th)
