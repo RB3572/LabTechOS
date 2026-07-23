@@ -21,8 +21,9 @@ import { cn } from '@/lib/utils'
 
 const FEED = 1500
 const STEP_SIZES = [0.1, 1, 10]
-const SYRINGE_STEPS = [10, 20, 50]
-const SYRINGE_FEED_MAX = 5000 // default top of the extruder speed slider (mm/min)
+// Defaults for the tops of the syringe sliders; both are editable in the UI.
+const SYRINGE_STEP_MAX = 500 // extrusion distance (mm)
+const SYRINGE_FEED_MAX = 1800 // extruder speed (mm/min)
 
 interface LogEntry {
   dir: 'tx' | 'rx' | 'sys'
@@ -62,6 +63,76 @@ const COMMAND_GROUPS: { group: string; items: { label: string; cmd: string; dang
   },
 ]
 
+/**
+ * A labelled slider running 0 → `max`, where the ceiling itself is typed into a
+ * box beside the track. Used for both syringe distance and speed.
+ */
+function SliderField({
+  label,
+  unit,
+  ariaLabel,
+  value,
+  onValue,
+  step,
+  max,
+  maxText,
+  onMaxText,
+  onMaxBlur,
+  maxStep,
+}: {
+  label: string
+  unit: string
+  ariaLabel: string
+  value: number
+  onValue: (v: number) => void
+  step: number
+  max: number
+  maxText: string
+  onMaxText: (v: string) => void
+  onMaxBlur: () => void
+  maxStep: number
+}) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="ml-auto font-mono text-xs font-semibold tabular-nums text-foreground">
+          {value} {unit}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onValue(Number(e.target.value))}
+        aria-label={ariaLabel}
+        className="w-full accent-primary"
+      />
+      <div className="mt-1 flex items-center gap-2">
+        <span className="font-mono text-[10px] text-muted-foreground">0</span>
+        <label className="ml-auto flex items-center gap-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground">Max</span>
+          <input
+            type="number"
+            min={1}
+            step={maxStep}
+            value={maxText}
+            onChange={(e) => onMaxText(e.target.value)}
+            onBlur={onMaxBlur}
+            aria-label={`Maximum ${ariaLabel.toLowerCase()}`}
+            className="h-6 w-20 rounded-md border border-input bg-white px-1.5 text-right text-[11px] font-medium text-foreground shadow-sm tabular-nums focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          />
+          <span className="text-[10px] text-muted-foreground">{unit}</span>
+        </label>
+      </div>
+    </div>
+  )
+}
+
 function JogButton({
   onClick,
   children,
@@ -94,7 +165,8 @@ export function MachineControlPage() {
 
   const [syringeStep, setSyringeStep] = useState(20)
   const [syringeFeed, setSyringeFeed] = useState(200)
-  // Slider ceiling is user-editable; kept as text so the box can be cleared mid-edit.
+  // Slider ceilings are user-editable; kept as text so a box can be cleared mid-edit.
+  const [stepMaxText, setStepMaxText] = useState(String(SYRINGE_STEP_MAX))
   const [feedMaxText, setFeedMaxText] = useState(String(SYRINGE_FEED_MAX))
   const [syringePos, setSyringePos] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
@@ -167,7 +239,9 @@ export function MachineControlPage() {
     setCalHomed(true)
   }
 
-  // Slider ceiling from the text box; the feed itself never exceeds it.
+  // Slider ceilings from the text boxes; neither value may exceed its ceiling.
+  const stepMax = Math.max(1, Number(stepMaxText) || SYRINGE_STEP_MAX)
+  const dist = Math.min(syringeStep, stepMax)
   const feedMax = Math.max(1, Number(feedMaxText) || SYRINGE_FEED_MAX)
   const feed = Math.min(syringeFeed, feedMax)
 
@@ -316,68 +390,40 @@ export function MachineControlPage() {
             </span>
           </div>
 
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Distance
-          </div>
-          <div className="mb-3 flex gap-1.5">
-            {SYRINGE_STEPS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSyringeStep(s)}
-                className={cn(
-                  'flex-1 rounded-md border py-1.5 text-xs font-semibold transition-colors',
-                  syringeStep === s
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {s} mm
-              </button>
-            ))}
-          </div>
-
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Speed
-            </span>
-            <span className="ml-auto font-mono text-xs font-semibold tabular-nums text-foreground">
-              {feed} mm/min
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={feedMax}
-            step={10}
-            value={feed}
-            onChange={(e) => setSyringeFeed(Number(e.target.value))}
-            aria-label="Extruder speed"
-            className="w-full accent-primary"
+          <SliderField
+            label="Distance"
+            unit="mm"
+            ariaLabel="Extrusion distance"
+            value={dist}
+            onValue={setSyringeStep}
+            step={1}
+            max={stepMax}
+            maxText={stepMaxText}
+            onMaxText={setStepMaxText}
+            onMaxBlur={() => setStepMaxText(String(stepMax))}
+            maxStep={10}
           />
-          <div className="mb-3 mt-1 flex items-center gap-2">
-            <span className="font-mono text-[10px] text-muted-foreground">0</span>
-            <label className="ml-auto flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-muted-foreground">Max</span>
-              <input
-                type="number"
-                min={1}
-                step={100}
-                value={feedMaxText}
-                onChange={(e) => setFeedMaxText(e.target.value)}
-                onBlur={() => setFeedMaxText(String(feedMax))}
-                aria-label="Maximum extruder speed"
-                className="h-6 w-20 rounded-md border border-input bg-white px-1.5 text-right text-[11px] font-medium text-foreground shadow-sm tabular-nums focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              />
-              <span className="text-[10px] text-muted-foreground">mm/min</span>
-            </label>
-          </div>
+
+          <SliderField
+            label="Speed"
+            unit="mm/min"
+            ariaLabel="Extruder speed"
+            value={feed}
+            onValue={setSyringeFeed}
+            step={10}
+            max={feedMax}
+            maxText={feedMaxText}
+            onMaxText={setFeedMaxText}
+            onMaxBlur={() => setFeedMaxText(String(feedMax))}
+            maxStep={100}
+          />
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(-syringeStep)}>
+            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(-dist)}>
               <ChevronsUp className="size-4" />
               Retract
             </Button>
-            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(syringeStep)}>
+            <Button variant="outline" className="flex-1 flex-col gap-0.5 py-6" onClick={() => moveSyringe(dist)}>
               <ChevronsDown className="size-4" />
               Advance
             </Button>
