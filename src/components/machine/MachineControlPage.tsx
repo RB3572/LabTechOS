@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 const FEED = 1500
 const STEP_SIZES = [0.1, 1, 10]
 const SYRINGE_STEPS = [10, 20, 50]
-const SYRINGE_FEEDS = [100, 200, 500] // extruder speed presets (mm/min)
+const SYRINGE_FEED_MAX = 5000 // default top of the extruder speed slider (mm/min)
 
 interface LogEntry {
   dir: 'tx' | 'rx' | 'sys'
@@ -51,7 +51,6 @@ const COMMAND_GROUPS: { group: string; items: { label: string; cmd: string; dang
     group: 'Machine',
     items: [
       { label: 'Motors Off', cmd: 'M84' },
-      { label: 'Allow Cold Extrude', cmd: 'M302 P1' },
       { label: 'Fan On', cmd: 'M106' },
       { label: 'Fan Off', cmd: 'M107' },
       { label: 'Firmware Info', cmd: 'M115' },
@@ -95,6 +94,8 @@ export function MachineControlPage() {
 
   const [syringeStep, setSyringeStep] = useState(20)
   const [syringeFeed, setSyringeFeed] = useState(200)
+  // Slider ceiling is user-editable; kept as text so the box can be cleared mid-edit.
+  const [feedMaxText, setFeedMaxText] = useState(String(SYRINGE_FEED_MAX))
   const [syringePos, setSyringePos] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
   const [command, setCommand] = useState('')
@@ -166,16 +167,20 @@ export function MachineControlPage() {
     setCalHomed(true)
   }
 
+  // Slider ceiling from the text box; the feed itself never exceeds it.
+  const feedMax = Math.max(1, Number(feedMaxText) || SYRINGE_FEED_MAX)
+  const feed = Math.min(syringeFeed, feedMax)
+
   // Advance (+) pushes the plunger / dispenses; retract (−) draws liquid up.
   const moveSyringe = (delta: number) => {
     setSyringePos((p) => Math.round((p + delta) * 100) / 100)
     if (cal.connected) {
-      ;['M83', `G1 E${delta} F${syringeFeed}`].forEach((l) => {
+      ;['M83', `G1 E${delta} F${feed}`].forEach((l) => {
         void serial.send(l)
         append('tx', l)
       })
     } else {
-      append('sys', `Syringe ${delta > 0 ? 'advance' : 'retract'} ${Math.abs(delta)} mm at ${syringeFeed} mm/min (offline — not sent)`)
+      append('sys', `Syringe ${delta > 0 ? 'advance' : 'retract'} ${Math.abs(delta)} mm at ${feed} mm/min (offline — not sent)`)
     }
   }
 
@@ -331,24 +336,40 @@ export function MachineControlPage() {
             ))}
           </div>
 
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Speed
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Speed
+            </span>
+            <span className="ml-auto font-mono text-xs font-semibold tabular-nums text-foreground">
+              {feed} mm/min
+            </span>
           </div>
-          <div className="mb-3 flex gap-1.5">
-            {SYRINGE_FEEDS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setSyringeFeed(f)}
-                className={cn(
-                  'flex-1 rounded-md border py-1.5 text-xs font-semibold transition-colors',
-                  syringeFeed === f
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {f} mm/min
-              </button>
-            ))}
+          <input
+            type="range"
+            min={0}
+            max={feedMax}
+            step={10}
+            value={feed}
+            onChange={(e) => setSyringeFeed(Number(e.target.value))}
+            aria-label="Extruder speed"
+            className="w-full accent-primary"
+          />
+          <div className="mb-3 mt-1 flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">0</span>
+            <label className="ml-auto flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-muted-foreground">Max</span>
+              <input
+                type="number"
+                min={1}
+                step={100}
+                value={feedMaxText}
+                onChange={(e) => setFeedMaxText(e.target.value)}
+                onBlur={() => setFeedMaxText(String(feedMax))}
+                aria-label="Maximum extruder speed"
+                className="h-6 w-20 rounded-md border border-input bg-white px-1.5 text-right text-[11px] font-medium text-foreground shadow-sm tabular-nums focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+              <span className="text-[10px] text-muted-foreground">mm/min</span>
+            </label>
           </div>
 
           <div className="flex gap-2">
@@ -361,8 +382,21 @@ export function MachineControlPage() {
               Advance
             </Button>
           </div>
+
+          <Button
+            variant="outline"
+            className="mt-2 w-full justify-between"
+            onClick={() => void send('M302 P1')}
+            title="Disable the cold-extrusion temperature check so the syringe can move unheated"
+          >
+            Allow Cold Extrude
+            <span className="font-mono text-[10px] text-muted-foreground">M302 P1</span>
+          </Button>
+
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Advance pushes the plunger (dispense); retract draws liquid up (aspirate).
+            Advance pushes the plunger (dispense); retract draws liquid up
+            (aspirate). Run Allow Cold Extrude once per power-cycle so the
+            firmware won't block an unheated extruder.
           </p>
         </section>
         </aside>
