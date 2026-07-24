@@ -64,7 +64,11 @@ export function parseCellFile(text: string): CellConfig {
   return {
     plateType: data.plateType,
     routine: Array.isArray(data.routine) ? data.routine : [],
-    deck: data.deck,
+    // Files written before plate rotation existed default to square.
+    deck: {
+      ...data.deck,
+      plate: { ...data.deck.plate, rotation: data.deck.plate.rotation ?? 0 },
+    },
     bed: data.bed ?? { x: 220, y: 220, z: 250 },
     calibration: data.calibration,
     pipette: data.pipette,

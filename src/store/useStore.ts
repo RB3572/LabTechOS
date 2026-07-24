@@ -210,7 +210,7 @@ interface AppState {
   // deck actions
   setDeckObject: (
     key: DeckObjectKey,
-    pos: Partial<{ x: number; y: number; z: number; height: number }>,
+    pos: Partial<{ x: number; y: number; z: number; height: number; rotation: number }>,
   ) => void
   setBed: (size: Partial<BedSize>) => void
   setSnapToGrid: (on: boolean) => void
@@ -268,7 +268,7 @@ export const useStore = create<AppState>((set, get) => {
 
     // Plate along the front edge; the two 80 mm tube stands sit behind it.
     deck: {
-      plate: { x: 12, y: 12, z: 1.5 },
+      plate: { x: 12, y: 12, z: 1.5, rotation: 0 },
       freshMedia: { x: 12, y: 130, height: RESERVOIR.height },
       waste: { x: 110, y: 130, height: RESERVOIR.height },
     },

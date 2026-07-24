@@ -3,6 +3,7 @@ import {
   PLATE_MODELS,
   RESERVOIR,
   defaultClearanceZ,
+  plateLocalToMachine,
   type PlateModelDef,
 } from '@/lib/deck'
 
@@ -93,11 +94,13 @@ export function calTargets(
   model: PlateModelDef,
 ): Record<CalKey, Vec3> {
   const wg = wellGrid(plate, model)
-  const corner = (col: number, row: number): Vec3 => ({
-    x: deck.plate.x + wg.offX + col * plate.pitch,
-    y: deck.plate.y + wg.offY + row * plate.pitch,
-    z: deck.plate.z,
-  })
+  const corner = (col: number, row: number): Vec3 => {
+    const p = plateLocalToMachine(deck, {
+      x: wg.offX + col * plate.pitch,
+      y: wg.offY + row * plate.pitch,
+    })
+    return { x: p.x, y: p.y, z: deck.plate.z }
+  }
   return {
     'well-tl': corner(0, 0),
     'well-br': corner(wg.nX - 1, wg.nY - 1),
@@ -123,7 +126,7 @@ export function calTargets(
 const r1 = (v: number) => Math.round(v * 10) / 10
 
 export interface CalibrationResult {
-  plate?: { x: number; y: number; z: number }
+  plate?: { x: number; y: number; z: number; rotation: number }
   freshMedia?: { x: number; y: number }
   waste?: { x: number; y: number }
   /** Nozzle Z at the well bottom — the safe pipetting depth to bake into G-code. */
@@ -152,11 +155,31 @@ export function computeDeckFromCalibration(
   const { 'well-tl': tl, 'well-br': br } = captured
 
   if (tl && br) {
-    // tl sits at grid (0,0); br at the opposite corner (offset by gw, gh).
-    const px = (tl.x - wg.offX + (br.x - wg.offX - wg.gw)) / 2
-    const py = (tl.y - wg.offY + (br.y - wg.offY - wg.gh)) / 2
+    // Rigid (rotation + translation) best fit through the two diagonal wells —
+    // the plate needn't sit square to the bed. In plate-local space tl is at
+    // (offX, offY) and br at (offX + gw, offY + gh); the angle between that
+    // known diagonal and the measured one is the plate's rotation.
+    const localAngle = Math.atan2(wg.gh, wg.gw)
+    const measuredAngle = Math.atan2(br.y - tl.y, br.x - tl.x)
+    const theta = measuredAngle - localAngle
+    const cos = Math.cos(theta)
+    const sin = Math.sin(theta)
+
+    // With rotation fixed, the origin follows from matching the two centroids —
+    // the least-squares translation for a two-point rigid fit.
+    const localCx = wg.offX + wg.gw / 2
+    const localCy = wg.offY + wg.gh / 2
+    const measCx = (tl.x + br.x) / 2
+    const measCy = (tl.y + br.y) / 2
+    const px = measCx - (localCx * cos - localCy * sin)
+    const py = measCy - (localCx * sin + localCy * cos)
     const pz = (tl.z + br.z) / 2
-    out.plate = { x: r1(px), y: r1(py), z: r1(pz) }
+
+    // Normalize to (-180, 180] so a tiny clockwise skew doesn't read as ~359°.
+    let deg = (theta * 180) / Math.PI
+    deg = ((deg + 180) % 360 + 360) % 360 - 180
+
+    out.plate = { x: r1(px), y: r1(py), z: r1(pz), rotation: r1(deg) }
     out.nozzleZ = r1(pz)
   }
   if (captured.fresh) {

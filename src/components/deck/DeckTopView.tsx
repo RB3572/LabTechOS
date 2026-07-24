@@ -7,6 +7,7 @@ import {
   PLATE_MODELS,
   RESERVOIR,
   clearances,
+  plateFootprint,
   reservoirFootprint,
   snapValue,
   validateDeck,
@@ -79,9 +80,9 @@ export function DeckTopView() {
   const toneColor = (key: DeckObjectKey) =>
     key === 'plate' ? '#2563eb' : key === 'freshMedia' ? '#ec4899' : '#475569'
   const footprintOf = (key: DeckObjectKey) =>
-    key === 'plate'
-      ? { x: deck.plate.x, y: deck.plate.y, w: model.width, d: model.depth }
-      : reservoirFootprint(deck[key])
+    key === 'plate' ? plateFootprint(deck, plate) : reservoirFootprint(deck[key])
+  // Bounds of the (possibly rotated) plate — anchors its labels.
+  const plateBox = plateFootprint(deck, plate)
 
   // grid lines
   const minorX: number[] = []
@@ -330,26 +331,38 @@ export function DeckTopView() {
 
       {/* Culture plate */}
       <g className="cursor-grab" style={{ touchAction: 'none' }} onPointerDown={begin('plate', deck.plate)} {...hoverProps('plate')}>
-        <rect
-          x={deck.plate.x}
-          y={deck.plate.y}
-          width={model.width}
-          height={model.depth}
-          rx={4}
-          fill="#ffffff"
-          stroke={plateStroke}
-          strokeWidth={hovered === 'plate' ? 2.2 : 1.2}
-          style={{ transition: 'stroke-width 120ms ease-out' }}
-        />
-        {wells.map((w, i) => (
-          <circle key={i} cx={w.cx} cy={w.cy} r={wellR} fill="#eff6ff" stroke="#bfdbfe" strokeWidth={0.4} />
-        ))}
-        <text x={deck.plate.x + model.width / 2} y={deck.plate.y - 3} textAnchor="middle" fontSize={6} fontWeight={600} fill="#475569">
+        {/* Body + wells are laid out square, then spun about the plate's near
+            corner — the same transform G-code applies to well centres. */}
+        <g
+          transform={
+            deck.plate.rotation
+              ? `rotate(${deck.plate.rotation} ${deck.plate.x} ${deck.plate.y})`
+              : undefined
+          }
+        >
+          <rect
+            x={deck.plate.x}
+            y={deck.plate.y}
+            width={model.width}
+            height={model.depth}
+            rx={4}
+            fill="#ffffff"
+            stroke={plateStroke}
+            strokeWidth={hovered === 'plate' ? 2.2 : 1.2}
+            style={{ transition: 'stroke-width 120ms ease-out' }}
+          />
+          {wells.map((w, i) => (
+            <circle key={i} cx={w.cx} cy={w.cy} r={wellR} fill="#eff6ff" stroke="#bfdbfe" strokeWidth={0.4} />
+          ))}
+        </g>
+        {/* Labels stay upright and ride the rotated bounding box. */}
+        <text x={plateBox.x + plateBox.w / 2} y={plateBox.y - 3} textAnchor="middle" fontSize={6} fontWeight={600} fill="#475569">
           Culture Plate · {plate.wellCount}-well
         </text>
         {hovered === 'plate' && (
-          <text x={deck.plate.x + model.width / 2} y={deck.plate.y - 10} textAnchor="middle" fontSize={5} fontWeight={600} fill="#2563eb" className="tnum">
+          <text x={plateBox.x + plateBox.w / 2} y={plateBox.y - 10} textAnchor="middle" fontSize={5} fontWeight={600} fill="#2563eb" className="tnum">
             X{n(deck.plate.x)} Y{n(deck.plate.y)} Z{n(deck.plate.z)}
+            {deck.plate.rotation ? ` ${n(deck.plate.rotation)}°` : ''}
           </text>
         )}
       </g>

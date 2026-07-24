@@ -121,9 +121,54 @@ export interface Footprint {
   d: number
 }
 
-export function plateFootprint(deck: DeckConfig, plate: Plate): Footprint {
+// ---------------------------------------------------------------------------
+// Plate placement — the plate may sit slightly rotated on the bed, so every
+// plate-local point (well centres, corners) goes through the same transform.
+// ---------------------------------------------------------------------------
+
+/** Rotate a plate-local offset (mm) by `rotationDeg` counter-clockwise. */
+export function rotateLocal(
+  local: { x: number; y: number },
+  rotationDeg: number,
+): { x: number; y: number } {
+  if (!rotationDeg) return { x: local.x, y: local.y }
+  const t = (rotationDeg * Math.PI) / 180
+  const c = Math.cos(t)
+  const s = Math.sin(t)
+  return { x: local.x * c - local.y * s, y: local.x * s + local.y * c }
+}
+
+/** Place a plate-local offset on the bed, honouring position + rotation. */
+export function plateLocalToMachine(
+  deck: DeckConfig,
+  local: { x: number; y: number },
+): { x: number; y: number } {
+  const r = rotateLocal(local, deck.plate.rotation)
+  return { x: deck.plate.x + r.x, y: deck.plate.y + r.y }
+}
+
+/** The plate's four corners on the bed, in order, following its rotation. */
+export function plateCorners(deck: DeckConfig, plate: Plate): { x: number; y: number }[] {
   const { width, depth } = PLATE_MODELS[plate.type]
-  return { x: deck.plate.x, y: deck.plate.y, w: width, d: depth }
+  return [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: width, y: depth },
+    { x: 0, y: depth },
+  ].map((l) => plateLocalToMachine(deck, l))
+}
+
+/**
+ * Axis-aligned bounds of the plate. With rotation this is the bounding box of
+ * the tilted rectangle, which is what bounds + collision checks need.
+ */
+export function plateFootprint(deck: DeckConfig, plate: Plate): Footprint {
+  const pts = plateCorners(deck, plate)
+  const xs = pts.map((p) => p.x)
+  const ys = pts.map((p) => p.y)
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, d: Math.max(...ys) - y }
 }
 
 export function reservoirFootprint(pos: { x: number; y: number }): Footprint {

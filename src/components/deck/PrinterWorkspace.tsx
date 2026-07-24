@@ -198,6 +198,8 @@ interface PlateModelProps {
   z: number
   hx: number
   hy: number
+  /** Plate rotation (degrees CCW on the bed) — calibration may find it askew. */
+  rotation: number
   outOfBounds: boolean
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void
   onHover?: (over: boolean) => void
@@ -208,7 +210,15 @@ export function PlateModel(props: PlateModelProps) {
   return props.model.url ? <StlPlate {...props} /> : <GeneratedPlate {...props} />
 }
 
-function StlPlate({ model, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
+/**
+ * Machine +Y maps to the scene's +Z, which flips handedness — a counter-clockwise
+ * rotation on the bed is a negative rotation about the scene's Y axis.
+ */
+function sceneYaw(rotationDeg: number): number {
+  return (-rotationDeg * Math.PI) / 180
+}
+
+function StlPlate({ model, x, y, z, hx, hy, rotation, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
   const geom = useLoader(STLLoader, model.url!)
   const prepared = useMemo(() => {
     const g = geom.clone()
@@ -234,6 +244,7 @@ function StlPlate({ model, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover 
     <mesh
       geometry={prepared}
       position={[x - hx, z, y - hy]}
+      rotation={[0, sceneYaw(rotation), 0]}
       onPointerDown={onPointerDown}
       onPointerOver={() => {
         if (onPointerDown) document.body.style.cursor = 'grab'
@@ -259,7 +270,7 @@ function StlPlate({ model, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover 
 // A dimensionally-accurate plate built from geometry (used for plates without an
 // STL). Body = rounded box; wells = recessed circular openings in a landscape
 // grid matching the app's coordinate system.
-function GeneratedPlate({ model, plate, x, y, z, hx, hy, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
+function GeneratedPlate({ model, plate, x, y, z, hx, hy, rotation, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
   const { width, depth, height } = model
   const nX = Math.max(plate.rows, plate.cols)
   const nY = Math.min(plate.rows, plate.cols)
@@ -282,6 +293,7 @@ function GeneratedPlate({ model, plate, x, y, z, hx, hy, outOfBounds, onPointerD
   return (
     <group
       position={[x - hx, z, y - hy]}
+      rotation={[0, sceneYaw(rotation), 0]}
       onPointerDown={onPointerDown}
       onPointerOver={() => {
         if (onPointerDown) document.body.style.cursor = 'grab'
@@ -985,6 +997,7 @@ export function PrinterWorkspace({
           <PlateModel
             model={model}
             plate={plate}
+            rotation={deck.plate.rotation}
             x={deck.plate.x}
             y={deck.plate.y}
             z={deck.plate.z}

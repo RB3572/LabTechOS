@@ -11,6 +11,7 @@ import {
   PLATE_MODELS,
   RESERVOIR,
   defaultClearanceZ,
+  plateLocalToMachine,
   type PlateModelDef,
 } from '@/lib/deck'
 
@@ -87,10 +88,13 @@ export function wellPositions(
       const id = `${plate.rowLabels[r]}${plate.colLabels[c]}`
       const cX = rowsAlongX ? r : c
       const cY = rowsAlongX ? c : r
-      out[id] = {
-        x: f1(deck.plate.x + offX + cX * plate.pitch),
-        y: f1(deck.plate.y + offY + cY * plate.pitch),
-      }
+      // Well centres ride the plate's rotation, so a slightly skewed plate is
+      // still addressed correctly.
+      const p = plateLocalToMachine(deck, {
+        x: offX + cX * plate.pitch,
+        y: offY + cY * plate.pitch,
+      })
+      out[id] = { x: f1(p.x), y: f1(p.y) }
     }
   }
   return out

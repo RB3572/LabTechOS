@@ -139,7 +139,7 @@ export function CalibrationWorkspace() {
 
         {showPlate && (
           <Suspense fallback={null}>
-            <PlateModel model={model} plate={plate} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
+            <PlateModel model={model} plate={plate} x={deck.plate.x} y={deck.plate.y} z={deck.plate.z} rotation={deck.plate.rotation} hx={hx} hy={hy} outOfBounds={!withinBed(plateF, bed)} />
           </Suspense>
         )}
         {showFresh && (

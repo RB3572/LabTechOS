@@ -137,7 +137,7 @@ export function DeckPanel() {
   const [feedback, setFeedback] = useState<string | null>(null)
 
   const set =
-    (key: DeckObjectKey, axis: 'x' | 'y' | 'z' | 'height') => (val: number) => {
+    (key: DeckObjectKey, axis: 'x' | 'y' | 'z' | 'height' | 'rotation') => (val: number) => {
       setDeckObject(key, { [axis]: val })
       setFeedback(null)
     }
@@ -183,9 +183,17 @@ export function DeckPanel() {
               <CoordField label="Y Axis (W)" suffix="mm" value={deck.plate.y} onChange={set('plate', 'y')} />
               <CoordField label="Z Offset" suffix="mm" value={deck.plate.z} onChange={set('plate', 'z')} />
               <CoordField label="Height (H)" suffix="mm" value={model.height} readOnly />
+              <CoordField
+                label="Rotation"
+                suffix="°"
+                value={deck.plate.rotation}
+                onChange={set('plate', 'rotation')}
+              />
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              {plate.wellCount}-well plate · footprint {model.width} × {model.depth} mm
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+              {plate.wellCount}-well plate · footprint {model.width} × {model.depth} mm.
+              Rotation (counter-clockwise about the near corner) is solved from the
+              two corner wells during calibration — the plate needn't sit square.
             </p>
             <StatusLine status={validation.plate} />
           </section>

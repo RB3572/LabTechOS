@@ -140,7 +140,11 @@ export type DeckObjectKey = 'plate' | 'freshMedia' | 'waste'
  * Z-offset above the bed.
  */
 export interface DeckConfig {
-  plate: { x: number; y: number; z: number }
+  /**
+   * `rotation` (degrees, counter-clockwise about the plate's near corner) lets
+   * the plate sit slightly askew on the bed — calibration solves for it.
+   */
+  plate: { x: number; y: number; z: number; rotation: number }
   /** Reservoirs carry a `height` (mm) so the pipette can clear the rim. */
   freshMedia: { x: number; y: number; height: number }
   waste: { x: number; y: number; height: number }
