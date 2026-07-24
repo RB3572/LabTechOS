@@ -15,6 +15,8 @@ import {
   AxisLabels,
   Bed,
   PlateModel,
+  toSceneX,
+  toSceneZ,
   Reservoir,
   StudioEnv,
 } from '@/components/deck/PrinterWorkspace'
@@ -45,7 +47,7 @@ function Guide({ target, color, hx, hy }: { target: Vec3; color: string; hx: num
   const ghost = useRef<THREE.Group>(null!)
   const ring = useRef<THREE.Mesh>(null!)
   const tx = target.x - hx
-  const tz = target.y - hy
+  const tz = toSceneZ(target.y, hy)
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
@@ -150,7 +152,7 @@ export function CalibrationWorkspace() {
         )}
 
         {/* Live toolhead at the tracked machine position */}
-        <group position={[th.x - hx, th.z, th.y - hy]}>
+        <group position={[toSceneX(th.x, hx), th.z, toSceneZ(th.y, hy)]}>
           <Toolhead color="#0ea5e9" />
         </group>
 

@@ -17,6 +17,8 @@ import {
   PlateModel,
   Reservoir,
   StudioEnv,
+  toSceneX,
+  toSceneZ,
 } from '@/components/deck/PrinterWorkspace'
 import { type SimSample, type SimTimeline, sampleTimeline } from '@/lib/sim'
 
@@ -89,7 +91,7 @@ function Playhead({
     }
     const s = sampleTimeline(timeline, tRef.current)
     nozzleRef.current = s.pos
-    if (groupRef.current) groupRef.current.position.set(s.pos.x - hx, s.pos.z, s.pos.y - hy)
+    if (groupRef.current) groupRef.current.position.set(toSceneX(s.pos.x, hx), s.pos.z, toSceneZ(s.pos.y, hy))
     if (tipMat.current && lastCarry.current !== s.carrying) {
       tipMat.current.color.set(s.carrying ? CARRY : TRAVEL)
       lastCarry.current = s.carrying
@@ -142,10 +144,10 @@ export function SimulationWorkspace({
     const steps = timeline.steps
     if (steps.length) {
       const f0 = steps[0].seg.from
-      pts.push([f0.x - hx, f0.z, f0.y - hy])
+      pts.push([toSceneX(f0.x, hx), f0.z, toSceneZ(f0.y, hy)])
     }
     for (const st of steps) {
-      pts.push([st.seg.to.x - hx, st.seg.to.z, st.seg.to.y - hy])
+      pts.push([toSceneX(st.seg.to.x, hx), st.seg.to.z, toSceneZ(st.seg.to.y, hy)])
     }
     return pts
   }, [timeline, hx, hy])

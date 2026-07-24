@@ -19,11 +19,14 @@ import { Button } from '@/components/ui/button'
 import { ResizablePanel } from '@/components/ui/ResizablePanel'
 import { cn } from '@/lib/utils'
 
-const FEED = 1500
 const STEP_SIZES = [0.1, 1, 10]
 // Defaults for the tops of the syringe sliders; both are editable in the UI.
 const SYRINGE_STEP_MAX = 500 // extrusion distance (mm)
 const SYRINGE_FEED_MAX = 1800 // extruder speed (mm/min)
+
+// Per-axis jog speeds (mm/min). Z is geared far slower than X/Y on a 3D printer.
+const AXIS_FEED_DEFAULTS = { x: 1500, y: 1500, z: 600 }
+const AXIS_FEED_MAXES = { x: 6000, y: 6000, z: 1200 }
 
 interface LogEntry {
   dir: 'tx' | 'rx' | 'sys'
@@ -168,6 +171,12 @@ export function MachineControlPage() {
   // Slider ceilings are user-editable; kept as text so a box can be cleared mid-edit.
   const [stepMaxText, setStepMaxText] = useState(String(SYRINGE_STEP_MAX))
   const [feedMaxText, setFeedMaxText] = useState(String(SYRINGE_FEED_MAX))
+  const [axisFeed, setAxisFeed] = useState({ ...AXIS_FEED_DEFAULTS })
+  const [axisMaxText, setAxisMaxText] = useState({
+    x: String(AXIS_FEED_MAXES.x),
+    y: String(AXIS_FEED_MAXES.y),
+    z: String(AXIS_FEED_MAXES.z),
+  })
   const [syringePos, setSyringePos] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
   const [command, setCommand] = useState('')
@@ -224,10 +233,20 @@ export function MachineControlPage() {
     setCommand('')
   }
 
+  // Ceilings from the boxes; each axis speed is clamped to its own.
+  const axisMax = {
+    x: Math.max(1, Number(axisMaxText.x) || AXIS_FEED_MAXES.x),
+    y: Math.max(1, Number(axisMaxText.y) || AXIS_FEED_MAXES.y),
+    z: Math.max(1, Number(axisMaxText.z) || AXIS_FEED_MAXES.z),
+  }
+  const feedFor = (axis: 'x' | 'y' | 'z') => Math.min(axisFeed[axis], axisMax[axis])
+
   const doJog = (dx: number, dy: number, dz: number) => {
     jogToolhead(dx, dy, dz)
     if (cal.connected) {
-      jogGcode(dx, dy, dz, FEED).forEach((l) => {
+      // Buttons move one axis at a time, so bill the move at that axis's speed.
+      const feed = dz !== 0 ? feedFor('z') : dx !== 0 ? feedFor('x') : feedFor('y')
+      jogGcode(dx, dy, dz, feed).forEach((l) => {
         void serial.send(l)
         append('tx', l)
       })
@@ -371,6 +390,28 @@ export function MachineControlPage() {
                 <span className="text-[9px] font-semibold">Z-</span>
               </JogButton>
             </div>
+          </div>
+
+          {/* Per-axis jog speeds */}
+          <div className="mt-4">
+            {(['x', 'y', 'z'] as const).map((axis) => (
+              <SliderField
+                key={axis}
+                label={`${axis.toUpperCase()} Speed`}
+                unit="mm/min"
+                ariaLabel={`${axis.toUpperCase()} axis speed`}
+                value={feedFor(axis)}
+                onValue={(v) => setAxisFeed((f) => ({ ...f, [axis]: v }))}
+                step={10}
+                max={axisMax[axis]}
+                maxText={axisMaxText[axis]}
+                onMaxText={(v) => setAxisMaxText((m) => ({ ...m, [axis]: v }))}
+                onMaxBlur={() =>
+                  setAxisMaxText((m) => ({ ...m, [axis]: String(axisMax[axis]) }))
+                }
+                maxStep={100}
+              />
+            ))}
           </div>
           {!serial.supported && (
             <p className="mt-3 text-xs text-amber-600">

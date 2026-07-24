@@ -149,6 +149,17 @@ export function Bed({ bed }: { bed: BedSize }) {
 }
 
 // Numbered axes + datum, billboarded so they're always legible.
+/**
+ * Machine (x, y) → scene (x, z). Machine +Y runs *away* from the camera, i.e.
+ * scene −Z, which keeps the machine's right-handed frame right-handed on screen:
+ * +X to the right, +Y up. Mapping +Y to +Z instead mirrors the deck, which is
+ * why the jog arrows used to point the opposite way to the toolhead's motion.
+ */
+export const toSceneX = (machineX: number, hx: number) => machineX - hx
+export const toSceneZ = (machineY: number, hy: number) => hy - machineY
+/** Inverse of `toSceneZ` — scene Z back to a machine Y. */
+export const fromSceneZ = (sceneZ: number, hy: number) => hy - sceneZ
+
 export function AxisLabels({ bed }: { bed: BedSize }) {
   const hx = bed.x / 2
   const hy = bed.y / 2
@@ -161,17 +172,21 @@ export function AxisLabels({ bed }: { bed: BedSize }) {
 
   return (
     <group>
+      {/* X ticks run along the near (machine y = 0) edge */}
       {xs.map((x) => (
-        <Html key={`x${x}`} position={[x - hx, 0.5, hy + 9]} center style={{ pointerEvents: 'none' }}>
+        <Html key={`x${x}`} position={[toSceneX(x, hx), 0.5, hy + 9]} center style={{ pointerEvents: 'none' }}>
           <div className={num}>{x}</div>
         </Html>
       ))}
+      {/* Y ticks run up the left (machine x = 0) edge */}
       {ys.map((y) => (
-        <Html key={`y${y}`} position={[-hx - 9, 0.5, y - hy]} center style={{ pointerEvents: 'none' }}>
+        <Html key={`y${y}`} position={[-hx - 9, 0.5, toSceneZ(y, hy)]} center style={{ pointerEvents: 'none' }}>
           <div className={num}>{y}</div>
         </Html>
       ))}
-      <Html position={[-hx - 10, 0.5, -hy - 10]} center style={{ pointerEvents: 'none' }}>
+      {/* Origin marker sits exactly on the homing corner, so a homed toolhead
+          lands right on it. */}
+      <Html position={[-hx, 0.5, hy]} center style={{ pointerEvents: 'none' }}>
         <div className="rounded bg-blue-600 px-1 py-0.5 text-[9px] font-bold leading-none text-white">
           0,0
         </div>
@@ -179,7 +194,7 @@ export function AxisLabels({ bed }: { bed: BedSize }) {
       <Html position={[hx + 16, 0.5, hy + 9]} center style={{ pointerEvents: 'none' }}>
         <div className="text-[10px] font-bold text-blue-900">X mm</div>
       </Html>
-      <Html position={[-hx - 9, 0.5, hy + 16]} center style={{ pointerEvents: 'none' }}>
+      <Html position={[-hx - 9, 0.5, -hy - 16]} center style={{ pointerEvents: 'none' }}>
         <div className="text-[10px] font-bold text-blue-900">Y mm</div>
       </Html>
     </group>
@@ -211,11 +226,11 @@ export function PlateModel(props: PlateModelProps) {
 }
 
 /**
- * Machine +Y maps to the scene's +Z, which flips handedness — a counter-clockwise
- * rotation on the bed is a negative rotation about the scene's Y axis.
+ * With machine +Y mapped to scene −Z the frame stays right-handed, so a
+ * counter-clockwise bed rotation is the same sign about the scene's Y axis.
  */
 function sceneYaw(rotationDeg: number): number {
-  return (-rotationDeg * Math.PI) / 180
+  return (rotationDeg * Math.PI) / 180
 }
 
 function StlPlate({ model, x, y, z, hx, hy, rotation, outOfBounds, onPointerDown, onHover }: PlateModelProps) {
@@ -236,14 +251,17 @@ function StlPlate({ model, x, y, z, hx, hy, rotation, outOfBounds, onPointerDown
     }
     g.computeBoundingBox()
     const bb2 = g.boundingBox!
-    g.translate(-bb2.min.x, -bb2.min.y, -bb2.min.z)
+    // Origin at the plate's near corner, extending along −Z because machine +Y
+    // runs away from the camera. Keeping the origin on that corner means the
+    // mesh rotates about the same pivot the calibration solves for.
+    g.translate(-bb2.min.x, -bb2.min.y, -bb2.min.z - model.depth)
     return g
   }, [geom, model.rotateX, model.width, model.height, model.depth])
 
   return (
     <mesh
       geometry={prepared}
-      position={[x - hx, z, y - hy]}
+      position={[toSceneX(x, hx), z, toSceneZ(y, hy)]}
       rotation={[0, sceneYaw(rotation), 0]}
       onPointerDown={onPointerDown}
       onPointerOver={() => {
@@ -292,7 +310,7 @@ function GeneratedPlate({ model, plate, x, y, z, hx, hy, rotation, outOfBounds, 
 
   return (
     <group
-      position={[x - hx, z, y - hy]}
+      position={[toSceneX(x, hx), z, toSceneZ(y, hy)]}
       rotation={[0, sceneYaw(rotation), 0]}
       onPointerDown={onPointerDown}
       onPointerOver={() => {
@@ -620,7 +638,7 @@ export function Reservoir({
 }) {
   const { width: w, depth: d, bore, floor } = RESERVOIR
   const cx = x + w / 2 - hx
-  const cz = y + d / 2 - hy
+  const cz = toSceneZ(y + d / 2, hy)
   const tint = outOfBounds ? '#ef4444' : color
 
   return (
@@ -733,7 +751,12 @@ function DragController({
     raycaster.setFromCamera(pointer, camera)
     if (!raycaster.ray.intersectPlane(plane, hit)) return
     let x = clamp(hit.x + bed.x / 2 - offsetRef.current.x, 0, bed.x - footprint.w)
-    let y = clamp(hit.z + bed.y / 2 - offsetRef.current.y, 0, bed.y - footprint.d)
+    // Scene Z runs opposite machine Y, so convert before applying the grab offset.
+    let y = clamp(
+      fromSceneZ(hit.z, bed.y / 2) - offsetRef.current.y,
+      0,
+      bed.y - footprint.d,
+    )
     if (snap) {
       x = clamp(snapValue(x), 0, bed.x - footprint.w)
       y = clamp(snapValue(y), 0, bed.y - footprint.d)
@@ -829,7 +852,7 @@ function DragGhost({
   color: string
 }) {
   const cx = x + w / 2 - hx
-  const cz = y + d / 2 - hy
+  const cz = toSceneZ(y + d / 2, hy)
   const pts = useMemo<[number, number, number][]>(() => {
     const ax = w / 2
     const az = d / 2
@@ -893,13 +916,13 @@ function ClearanceDims3D({
         let p2: [number, number, number]
         let mid: [number, number, number]
         if (d.axis === 'x') {
-          p1 = [d.a - hx, yL, d.at - hy]
-          p2 = [d.b - hx, yL, d.at - hy]
-          mid = [(d.a + d.b) / 2 - hx, yL, d.at - hy]
+          p1 = [d.a - hx, yL, toSceneZ(d.at, hy)]
+          p2 = [d.b - hx, yL, toSceneZ(d.at, hy)]
+          mid = [(d.a + d.b) / 2 - hx, yL, toSceneZ(d.at, hy)]
         } else {
-          p1 = [d.at - hx, yL, d.a - hy]
-          p2 = [d.at - hx, yL, d.b - hy]
-          mid = [d.at - hx, yL, (d.a + d.b) / 2 - hy]
+          p1 = [d.at - hx, yL, toSceneZ(d.a, hy)]
+          p2 = [d.at - hx, yL, toSceneZ(d.b, hy)]
+          mid = [d.at - hx, yL, toSceneZ((d.a + d.b) / 2, hy)]
         }
         return (
           <group key={i}>
@@ -967,7 +990,10 @@ export function PrinterWorkspace({
     (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation()
       setActiveDeckTab(key)
-      offsetRef.current = { x: e.point.x + hx - min.x, y: e.point.z + hy - min.y }
+      offsetRef.current = {
+        x: e.point.x + hx - min.x,
+        y: fromSceneZ(e.point.z, hy) - min.y,
+      }
       document.body.style.cursor = 'grabbing'
       setDragging(key)
     }
@@ -1012,9 +1038,9 @@ export function PrinterWorkspace({
         <Reservoir x={deck.freshMedia.x} y={deck.freshMedia.y} hx={hx} hy={hy} height={deck.freshMedia.height} color="#ec4899" outOfBounds={!withinBed(freshF, bed)} onPointerDown={beginDrag('freshMedia', deck.freshMedia)} onHover={setHover('freshMedia')} />
         <Reservoir x={deck.waste.x} y={deck.waste.y} hx={hx} hy={hy} height={deck.waste.height} color="#475569" outOfBounds={!withinBed(wasteF, bed)} onPointerDown={beginDrag('waste', deck.waste)} onHover={setHover('waste')} />
 
-        <ObjectLabel cx={plateF.x + plateF.w / 2 - hx} cz={plateF.y + plateF.d / 2 - hy} height={deck.plate.z + model.height} text={`Culture Plate · ${plate.wellCount}-well`} tone="plate" active={hovered === 'plate'} coords={plateCoords} />
-        <ObjectLabel cx={freshF.x + freshF.w / 2 - hx} cz={freshF.y + freshF.d / 2 - hy} height={deck.freshMedia.height} text="Fresh Media" tone="fresh" active={hovered === 'freshMedia'} coords={freshCoords} />
-        <ObjectLabel cx={wasteF.x + wasteF.w / 2 - hx} cz={wasteF.y + wasteF.d / 2 - hy} height={deck.waste.height} text="Waste" tone="waste" active={hovered === 'waste'} coords={wasteCoords} />
+        <ObjectLabel cx={toSceneX(plateF.x + plateF.w / 2, hx)} cz={toSceneZ(plateF.y + plateF.d / 2, hy)} height={deck.plate.z + model.height} text={`Culture Plate · ${plate.wellCount}-well`} tone="plate" active={hovered === 'plate'} coords={plateCoords} />
+        <ObjectLabel cx={toSceneX(freshF.x + freshF.w / 2, hx)} cz={toSceneZ(freshF.y + freshF.d / 2, hy)} height={deck.freshMedia.height} text="Fresh Media" tone="fresh" active={hovered === 'freshMedia'} coords={freshCoords} />
+        <ObjectLabel cx={toSceneX(wasteF.x + wasteF.w / 2, hx)} cz={toSceneZ(wasteF.y + wasteF.d / 2, hy)} height={deck.waste.height} text="Waste" tone="waste" active={hovered === 'waste'} coords={wasteCoords} />
 
         {dragging && (
           <DragGhost

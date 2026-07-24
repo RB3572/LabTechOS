@@ -17,6 +17,8 @@ import {
   PlateModel,
   Reservoir,
   StudioEnv,
+  toSceneX,
+  toSceneZ,
 } from '@/components/deck/PrinterWorkspace'
 
 // Pipette with a plunger that rises as liquid is drawn up.
@@ -76,7 +78,7 @@ export function PipetteCalibrationWorkspace() {
   const ringColor = pipette.source === 'fresh' ? '#ec4899' : '#475569'
   const toolColor = pipette.source ? '#ec4899' : '#0ea5e9'
   const cx = container ? container.x + RESERVOIR.width / 2 - hx : 0
-  const cz = container ? container.y + RESERVOIR.depth / 2 - hy : 0
+  const cz = container ? toSceneZ(container.y + RESERVOIR.depth / 2, hy) : 0
   const plunger = Math.min(Math.abs(pipette.ePosition) * 0.5, 14)
 
   const nozzleRef = useRef<{ x: number; y: number; z: number } | null>(th)
@@ -102,7 +104,7 @@ export function PipetteCalibrationWorkspace() {
 
         {container && <TargetRing x={cx} z={cz} color={ringColor} />}
 
-        <group position={[th.x - hx, th.z, th.y - hy]}>
+        <group position={[toSceneX(th.x, hx), th.z, toSceneZ(th.y, hy)]}>
           <Toolhead color={toolColor} plunger={plunger} />
         </group>
 
