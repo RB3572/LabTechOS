@@ -53,9 +53,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
         <div className="leading-tight">
           <div className="text-[15px] font-semibold tracking-tight text-foreground">
-            CellSlicer
+            LabTechOS
           </div>
-          <div className="text-xs text-muted-foreground">CS-4000 v2.4.0</div>
+          <div className="text-xs text-muted-foreground">LTOS-4000 v2.4.0</div>
         </div>
       </div>
 

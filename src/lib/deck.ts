@@ -4,7 +4,7 @@ import type { BedSize, DeckConfig, ObjectStatus, Plate, PlateType } from '@/type
 // Machine constants (millimetres)
 // ---------------------------------------------------------------------------
 
-/** Default printable build volume of the CS-4000 deck (user-configurable). */
+/** Default printable build volume of the deck (user-configurable). */
 // Default build volume — Creality Ender 3 SE (220 × 220 × 250 mm).
 export const BED: BedSize = { x: 220, y: 220, z: 250 }
 

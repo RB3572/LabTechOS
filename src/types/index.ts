@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Core domain types for CellSlicer
+// Core domain types for LabTechOS
 // ---------------------------------------------------------------------------
 
 /** Which application screen is currently mounted (simple state-based routing). */

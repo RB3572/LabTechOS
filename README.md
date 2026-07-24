@@ -1,4 +1,4 @@
-# CellSlicer
+# LabTechOS
 
 A desktop-style laboratory-automation **protocol designer + machine controller**,
 inspired by Opentrons Protocol Designer, PrusaSlicer, and professional

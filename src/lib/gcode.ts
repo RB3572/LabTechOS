@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// G-code generation + parsing for CellSlicer.
+// G-code generation + parsing for LabTechOS.
 //
 // Turns a deck layout + protocol routine into a realistic media-exchange
 // program, plus a structured tool-path the simulation animates and per-line
@@ -325,7 +325,7 @@ export function generateGcode(opts: GenOptions): GcodeProgram {
 
   // --- preamble ------------------------------------------------------------
 
-  comment('CellSlicer generated program')
+  comment('LabTechOS generated program')
   comment(`Plate: ${plate.name} (${plate.wellCount} wells)`)
   comment(`Travel/clearance Z ${fmt(travelZ)} mm · well nozzle Z ${fmt(nozzleZ)} mm`)
   comment(`Tube floors — fresh Z ${fmt(freshZ)} mm · waste Z ${fmt(wasteZ)} mm`)

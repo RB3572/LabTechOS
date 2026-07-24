@@ -1,9 +1,9 @@
 {
-  "name": "cellslicer",
+  "name": "labtechos",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "CellSlicer — laboratory automation protocol designer",
+  "description": "LabTechOS — laboratory automation protocol designer",
   "engines": {
     "node": ">=18"
   },

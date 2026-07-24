@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// .cell file — a single portable snapshot of a CellSlicer protocol: the deck
+// .cell file — a single portable snapshot of a LabTechOS protocol: the deck
 // object placements, the build volume, the programmed routine, and any
 // calibration captures. Saved as JSON, loaded back on the dashboard.
 // ---------------------------------------------------------------------------
@@ -24,20 +24,22 @@ export interface CellConfig {
 }
 
 interface CellFile extends CellConfig {
-  format: 'cellslicer'
+  format: string
   version: number
   app: string
   savedAt?: string
 }
 
-const FORMAT = 'cellslicer'
+const FORMAT = 'labtechos'
+/** Files written before the rename — still readable so saved protocols survive. */
+const LEGACY_FORMATS = ['cellslicer']
 
 /** Serialize the current configuration to a pretty-printed .cell document. */
 export function serializeConfig(cfg: CellConfig, savedAt?: string): string {
   const file: CellFile = {
     format: FORMAT,
     version: 1,
-    app: 'CellSlicer',
+    app: 'LabTechOS',
     savedAt,
     ...cfg,
   }
@@ -52,8 +54,9 @@ export function parseCellFile(text: string): CellConfig {
   } catch {
     throw new Error('This file is not valid JSON — it may be corrupted.')
   }
-  if (!data || data.format !== FORMAT) {
-    throw new Error('Not a CellSlicer (.cell) file.')
+  const format = data?.format
+  if (!data || !format || (format !== FORMAT && !LEGACY_FORMATS.includes(format))) {
+    throw new Error('Not a LabTechOS (.cell) file.')
   }
   if (!data.deck || !data.plateType) {
     throw new Error('The .cell file is missing required configuration fields.')
@@ -90,7 +93,7 @@ export function pickCellFile(): Promise<string | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.cell,application/json,application/cellslicer'
+    input.accept = '.cell,application/json,application/labtechos'
     input.onchange = () => {
       const file = input.files?.[0]
       if (!file) {

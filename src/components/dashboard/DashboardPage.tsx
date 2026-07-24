@@ -55,7 +55,7 @@ export function DashboardPage() {
         {/* Heading */}
         <header className="mb-7">
           <h2 className="text-[22px] font-semibold tracking-tight text-foreground">
-            CellSlicer Workspace
+            LabTechOS Workspace
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Create and manage laboratory automation protocols.
